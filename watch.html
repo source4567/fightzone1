@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Watch</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar__row">
+      <a class="topbar__back" href="./index.html">← Back</a>
+      <div class="topbar__title">Watch</div>
+      <div class="topbar__spacer"></div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="watchHeader">
+      <h1 class="watchHeader__title" id="eventTitle">Live stream</h1>
+      <div class="watchHeader__sub" id="eventSub">Event ID: —</div>
+    </div>
+
+    <section class="playerShell">
+      <div class="playerPlaceholder">
+        <div class="playerPlaceholder__inner">
+          <div class="playerPlaceholder__big">STREAM SCREEN</div>
+          <div class="playerPlaceholder__small">Placeholder only. A real source will be connected later.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const eventId = params.get("event") || "unknown";
+
+    document.getElementById("eventTitle").textContent = "Live stream";
+    document.getElementById("eventSub").textContent = `Event ID: ${eventId}`;
+  </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+name = "fightzone-stripe"
+main = "worker_stripe.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+PUBLIC_BASE_URL = "https://YOUR_DOMAIN_HERE"
+
+# Secrets to set with:
+# wrangler secret put STRIPE_SECRET_KEY
+# wrangler secret put STRIPE_PRICE_BASIC
+# wrangler secret put STRIPE_PRICE_PREMIUM
+# wrangler secret put STRIPE_PRICE_VIP
