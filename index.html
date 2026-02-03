@@ -125,7 +125,7 @@
 
     .request-btn:hover{ background: rgba(37,99,235,.5); }
     .request-btn:active{ transform: translateY(1px); }
-  
+
     .request-stack{
       width: 100%;
       max-width: 760px;
@@ -187,7 +187,8 @@
   <div class="container topbar__inner">
     <div class="topbar__left">
       <div class="topbar__brand">
-        <img src="./img/fz-logo.png" alt="FZ">
+        <!-- FIX: logo is in repo root, not /img -->
+        <img src="./fz-logo.png" alt="FZ">
         <span class="brand__name">Fightzone</span>
       </div>
 
@@ -236,7 +237,7 @@
         <button class="cards-arrow cards-arrow--left" aria-label="Scroll left">‹</button>
 
         <div class="cards cards--1-wide">
-          
+
 
           <div class="card"
             data-event="bautista"
@@ -361,7 +362,7 @@
                data-meta="Coming soon · Boxing">
             <div class="card__media card__media--image" style="background-image:url('./wilder-vs-chisora-1024x576.jpg')"></div>
             <div class="card__footer">
-              <div class="card__title">Deontay Wilder vs. Derek Chisora</div>
+              <div class="card__title">Tyson Fury vs. Derek Chisora</div>
               <div class="card__meta">
                 <span class="card__source">PTS</span>
                 <div class="card__right">
@@ -396,7 +397,7 @@
                 <span class="card__source">ASL</span>
                 <div class="card__right">
                   <div class="card__date">TBA</div>
-                  
+
                 </div>
               </div>
             </div>
@@ -412,7 +413,7 @@
                 <span class="card__source">ASL</span>
                 <div class="card__right">
                   <div class="card__date">TBA</div>
-                  
+
                 </div>
               </div>
             </div>
@@ -427,7 +428,7 @@
 
   </div>
 
-  
+
   <!-- ================= REQUEST PAGE ================= -->
   <div class="page" id="page-request">
     <div class="request-wrap">
@@ -481,7 +482,7 @@
   </div>
 
 
-  
+
   </div>
 <div class="page" id="page-vip">
     <div class="vip-wrap">
@@ -813,12 +814,19 @@
     }
   }
 
+  function showTapToPlay(show) {
+    const tap = document.getElementById("tapToPlay");
+    if (!tap) return;
+    tap.classList.toggle("is-on", !!show);
+  }
+
   function startVideo() {
     const video = document.getElementById("liveVideo");
     if (!video) return;
 
     if (window.__hls_inited) {
-            video.play().then(() => showTapToPlay(false)).catch(() => showTapToPlay(true));return;
+      video.play().then(() => showTapToPlay(false)).catch(() => showTapToPlay(true));
+      return;
     }
 
     window.__hls_inited = true;
@@ -829,12 +837,14 @@
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-              video.play().then(() => showTapToPlay(false)).catch(() => showTapToPlay(true));});
+        video.play().then(() => showTapToPlay(false)).catch(() => showTapToPlay(true));
+      });
 
       window.__hls_instance = hls;
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = STREAM_SRC;
-            video.play().then(() => showTapToPlay(false)).catch(() => showTapToPlay(true));}
+      video.play().then(() => showTapToPlay(false)).catch(() => showTapToPlay(true));
+    }
   }
 
   function stopVideo() {
@@ -969,6 +979,16 @@
         if (e.target === overlay) closeOverlay();
       });
     }
+
+    const tapBtn = document.getElementById("tapToPlayBtn");
+    if (tapBtn) {
+      tapBtn.addEventListener("click", () => {
+        const v = document.getElementById("liveVideo");
+        if (!v) return;
+        v.muted = false;
+        v.play().then(() => showTapToPlay(false)).catch(() => showTapToPlay(true));
+      });
+    }
   });
 </script>
 
@@ -987,5 +1007,18 @@
   });
 </script>
 
+<!-- VIP buttons -> Stripe -->
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll(".vip-btn[data-stripe-url]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const url = btn.getAttribute("data-stripe-url");
+        if (url) window.location.href = url;
+      });
+    });
+  });
+</script>
+
 </body>
 </html>
+
