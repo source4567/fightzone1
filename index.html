@@ -725,7 +725,7 @@
 
   function resolveStreamSrc(){
   // 🔴 ВСТАВЬ СЮДА СВОЙ TRY-CLOUDFLARE URL
-  const OWNCAST_ORIGIN = "https://green-musical-regards-culture.trycloudflare.com";
+  const OWNCAST_ORIGIN = "https://administered-moderate-broadband-florence.trycloudflare.com";
 
   return OWNCAST_ORIGIN + "/hls/stream.m3u8";
 }
@@ -941,6 +941,54 @@
       alert("Request sent!");
       form.reset();
     });
+  });
+</script>
+
+
+<script>
+  // ================================
+  // HEADER NAV (Main/Request/VIP/Archive)
+  // ================================
+  document.addEventListener("DOMContentLoaded", () => {
+    const navItems = Array.from(document.querySelectorAll(".topbar__nav .nav__item[data-page]"));
+    const pages = Array.from(document.querySelectorAll(".page"));
+    const brand = document.querySelector(".topbar__brand");
+
+    function showPage(pageName){
+      const targetId = "page-" + pageName;
+      pages.forEach(p => p.classList.toggle("is-active", p.id === targetId));
+      navItems.forEach(a => a.classList.toggle("active", a.dataset.page === pageName));
+
+      // If stream overlay is open, close it (so it doesn't cover the page)
+      if (window.closeOverlay) window.closeOverlay();
+
+      // Scroll to top for nice UX
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    // Click handlers
+    navItems.forEach(a => {
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        const pageName = a.dataset.page;
+        if (!pageName) return;
+        showPage(pageName);
+      });
+    });
+
+    // Brand click -> Main
+    if (brand){
+      brand.addEventListener("click", (e) => {
+        e.preventDefault();
+        showPage("main");
+      });
+    }
+
+    // Optional: open correct page from URL hash: #request, #vip, #archive
+    const hash = (location.hash || "").replace("#","").trim();
+    if (hash && ["main","request","vip","archive"].includes(hash)){
+      showPage(hash);
+    }
   });
 </script>
 
