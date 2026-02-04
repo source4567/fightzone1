@@ -512,20 +512,6 @@ img, video{
   display:flex;          /* row: main + chat */
 }
 
-.stream-main{
-  flex:1;
-  min-width:0;
-  display:flex;
-  flex-direction:column;
-}
-
-.stream-video{
-  flex:1;
-  min-height:0;
-  padding:0px;
-  display:flex;
-}
-
 .stream-player-box{
   width: 100%;
   height: 100%;
@@ -542,15 +528,6 @@ img, video{
   background: #000;
 }
 
-
-.stream-info-bar{
-  background:#0b0f1a;
-  padding:14px 18px;
-  border-top:1px solid rgba(255,255,255,.08);
-  display:flex;
-  flex-direction:column;
-  gap:4px;
-}
 
 .stream-info-bar .stream-title{
   font-size:16px;
@@ -884,3 +861,58 @@ img, video{
 
 /* Hard disable Tap to play (safety) */
 .tap-to-play{display:none!important;}
+
+/* ===== STREAM OVERLAY: fill the screen (fix bottom gap) ===== */
+.stream-overlay{
+  /* ensure overlay always matches viewport height on mobile + desktop */
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.stream-overlay.active{
+  height: 100vh;
+  height: 100dvh;
+}
+
+.stream-overlay .stream-overlay-inner,
+.stream-overlay .stream-overlay-content,
+.stream-overlay .stream-layout,
+.stream-overlay .stream-main{
+  min-height: 0;
+}
+
+/* make the whole overlay layout stretch to full height */
+.stream-overlay-inner{
+  height: 100%;
+  max-height: 100%;
+  display:flex;
+  flex-direction:column;
+}
+
+.stream-overlay-content{
+  flex: 1;
+  min-height: 0;
+  display:flex;
+}
+
+/* keep video + sidebar in a full-height row */
+.stream-layout{
+  flex:1;
+  min-height:0;
+  display:flex;
+}
+
+/* IMPORTANT: do NOT force video to bottom; let it size naturally */
+.stream-main{
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+}
+
+.stream-video{
+  flex:1;
+  min-height:0;
+  display:flex;
+  max-height: 90vh;
+}
