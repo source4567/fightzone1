@@ -445,18 +445,26 @@ img, video{
 
 .vip-btn{
   width:100%;
-  height:44px;
-  margin-top:14px;
-  border-radius:8px;
-  border:1px solid rgba(255,255,255,.28);
-  background:rgba(255,255,255,.14);
-  color:rgba(255,255,255,.92);
+  min-height:56px;              /* ← БОЛЬШЕ */
+  margin-top:18px;              /* ← ВОЗДУХ */
+  border-radius:10px;           /* ← МЯГЧЕ */
+  border:1px solid rgba(255,255,255,.35);
+  background:rgba(255,255,255,.18);
+  color:#fff;
+
   font-family:Inter, system-ui, sans-serif;
-  font-size:14px;
-  font-weight:600;
+  font-size:16px;               /* ← КРУПНЕЕ ТЕКСТ */
+  font-weight:700;              /* ← УВЕРЕННЕЕ */
+  letter-spacing:.2px;
+
+  display:flex;                 /* ← ЦЕНТРОВКА */
+  align-items:center;
+  justify-content:center;
+
   cursor:pointer;
   transition: background .2s ease, border-color .2s ease, transform .05s ease;
 }
+
 
 .vip-btn:hover{
   background: rgba(255,255,255,.22);
@@ -615,7 +623,7 @@ img, video{
   justify-content: center;
   flex-direction: column;
   gap: 10px;
-  background: rgba(0,0,0,.55);
+  background: rgba(0,0,0,.8);         /* ← ВОТ ЭТА СТРОКА */
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   color: #fff;
@@ -914,6 +922,6 @@ img, video{
   flex:1;
   min-height:0;
   display:flex;
-  max-height: 90vh;
+  max-height: 95vh;
 }
 
