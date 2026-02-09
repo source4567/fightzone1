@@ -648,6 +648,43 @@ img, video{
   width: 100%;
 }
 
+
+/* Video fullscreen button (native fullscreen on iOS) */
+.video-fullscreen-btn{
+  position:absolute;
+  right:12px;
+  top:12px;
+  bottom:auto;
+  width:44px;
+  height:44px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,0.18);
+  background:rgba(0,0,0,.55);
+  color:#fff;
+  font-size:20px;
+  font-weight:700;
+  line-height:1;
+  cursor:pointer;
+  z-index:20;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  -webkit-tap-highlight-color: transparent;
+}
+.video-fullscreen-btn:hover{ background:rgba(0,0,0,.70); }
+.video-fullscreen-btn:active{ transform: translateY(1px); }
+
+@media (max-width: 520px){
+  .video-fullscreen-btn{
+    right:10px;
+    bottom:10px;
+    width:36px;
+    height:36px;
+    border-radius:12px;
+  }
+}
+
+
 /* Stream placeholder overlay */
 .stream-player-box{
   position: relative;
