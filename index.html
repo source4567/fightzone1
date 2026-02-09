@@ -950,8 +950,6 @@ ph.classList.toggle("is-on", !!on);
 
   function updatePlaceholderCountdown(card) {
   const start = getEventStart(card);
-  setPlaceholder(false); // ← ВОТ ЭТА СТРОКА. УБИРАЕТ ДИВ СРАЗУ
-    return;               // ← И СРАЗУ ВЫХОДИМ ИЗ ФУНКЦИИ
 
   if (!start) {
     setPlaceholder(true, "This event is not live yet", "--", "Starting soon");
