@@ -1768,3 +1768,12 @@ body.is-modal-open{
   font-weight: 800;
   color: #fff;
 }
+/* ===== REMOVE DESKTOP SCROLLBAR IN CHAT ===== */
+.chat-body{
+  scrollbar-width: none;       /* Firefox */
+  -ms-overflow-style: none;    /* IE/Edge */
+}
+
+.chat-body::-webkit-scrollbar{
+  display: none;               /* Chrome / Safari */
+}
