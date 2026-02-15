@@ -1,6 +1,7 @@
 /* chat.js — Fightzone realtime chat (Supabase)
    - Reads last messages
    - Subscribes to new messages via Realtime (postgres_changes)
+   - Also broadcasts new messages for instant updates across tabs/users
    - Allows sending only for authenticated users
 */
 
@@ -10,18 +11,9 @@ const CHAT_SUPABASE_ANON_KEY =
 
 const CHAT_TABLE = "chat_messages";
 
-// Nickname color palette (stable per account via user_id hash)
 const NAME_COLORS = [
-  "#FF0000",
-  "#005BFF",
-  "#00FF00",
-  "#FFD700",
-  "#FF00FF",
-  "#7A00FF",
-  "#FF7A00",
-  "#00FFFF",
-  "#B6FF00",
-  "#001AFF"
+  "#FF0000", "#005BFF", "#00FF00", "#FFD700", "#FF00FF",
+  "#7A00FF", "#FF7A00", "#00FFFF", "#B6FF00", "#001AFF"
 ];
 
 function hashStringToInt(str) {
@@ -33,11 +25,23 @@ function hashStringToInt(str) {
   }
   return Math.abs(h);
 }
-
 function getNameColor(msg) {
   const key = msg?.user_id || msg?.username || "";
-  const idx = hashStringToInt(key) % NAME_COLORS.length;
-  return NAME_COLORS[idx];
+  return NAME_COLORS[hashStringToInt(key) % NAME_COLORS.length];
+}
+function esc(s) {
+  return String(s)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#39;");
+}
+function isNearBottom(el) {
+  return (el.scrollHeight - el.scrollTop - el.clientHeight) < 120;
+}
+function scrollToBottom(el) {
+  el.scrollTop = el.scrollHeight;
 }
 
 // UI
@@ -50,32 +54,15 @@ const chatHint = document.getElementById("chatHint");
 let ACTIVE_ROOM = "global";
 let realtimeChannel = null;
 
-// Track current user + last send (to avoid duplicates if realtime later arrives)
+// Current user + dedupe
 let CURRENT_USER_ID = null;
 let LAST_SENT = null; // { room, content, atMs }
 
+// Helper
 function normalizeRoom(roomId) {
   const r = String(roomId || "").trim();
   return r ? r : "global";
 }
-
-function esc(s) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function isNearBottom(el) {
-  return (el.scrollHeight - el.scrollTop - el.clientHeight) < 120;
-}
-
-function scrollToBottom(el) {
-  el.scrollTop = el.scrollHeight;
-}
-
 function getDisplayName(user) {
   const md = user?.user_metadata || {};
   const custom = md?.custom_claims || md?.customClaims || md?.custom_claim || null;
@@ -94,13 +81,9 @@ function getDisplayName(user) {
 
 async function getClient() {
   if (window.sb && window.sb.auth) return window.sb;
-
   if (!window.supabase || typeof window.supabase.createClient !== "function") {
     console.error("[Chat] Supabase JS not loaded.");
     return null;
-  }
-  if (!CHAT_SUPABASE_URL.startsWith("http")) {
-    console.warn("[Chat] Set CHAT_SUPABASE_URL / CHAT_SUPABASE_ANON_KEY in chat.js");
   }
   return window.supabase.createClient(CHAT_SUPABASE_URL, CHAT_SUPABASE_ANON_KEY);
 }
@@ -132,16 +115,33 @@ function setChatEnabled(enabled) {
   if (btn) btn.disabled = !enabled;
 }
 
-function clearEmptyStateIfNeeded() {
+function clearSysIfNeeded() {
   if (!chatBody) return;
   if (chatBody.firstElementChild && chatBody.firstElementChild.classList.contains("chat-sys")) {
     chatBody.innerHTML = "";
   }
 }
-
 function showEmptyState() {
   if (!chatBody) return;
   chatBody.innerHTML = '<div class="chat-sys">No messages yet.</div>';
+}
+
+function appendMessageToUI(msg) {
+  if (!chatBody) return;
+
+  // room guard
+  if (msg?.room && msg.room !== ACTIVE_ROOM) return;
+
+  clearSysIfNeeded();
+
+  const shouldStick = isNearBottom(chatBody);
+  chatBody.appendChild(renderMessageRow(msg));
+
+  while (chatBody.children.length > 60) {
+    chatBody.removeChild(chatBody.firstElementChild);
+  }
+
+  if (shouldStick) scrollToBottom(chatBody);
 }
 
 async function loadRecent(sb) {
@@ -166,25 +166,23 @@ async function loadRecent(sb) {
   }
 
   chatBody.innerHTML = "";
-  for (const msg of data) {
-    chatBody.appendChild(renderMessageRow(msg));
-  }
+  for (const msg of data) chatBody.appendChild(renderMessageRow(msg));
   scrollToBottom(chatBody);
 }
 
 async function startRealtime(sb) {
   if (!sb) return;
 
-  // remove previous subscription (if any)
+  // remove previous
   if (realtimeChannel) {
     try { await sb.removeChannel(realtimeChannel); } catch (_e) {}
     realtimeChannel = null;
   }
 
   const roomAtSubscribe = ACTIVE_ROOM;
-
   realtimeChannel = sb.channel("fightzone-chat-" + roomAtSubscribe);
 
+  // 1) Postgres changes (best case)
   realtimeChannel.on(
     "postgres_changes",
     {
@@ -194,13 +192,12 @@ async function startRealtime(sb) {
       filter: `room=eq.${roomAtSubscribe}`
     },
     (payload) => {
-      if (!payload?.new || !chatBody) return;
-
-      // If we switched rooms since subscribe started, ignore stale events
+      if (!payload?.new) return;
       if (roomAtSubscribe !== ACTIVE_ROOM) return;
 
-      // Optional de-dupe: if this is our just-sent message and we already rendered optimistically, skip
       const n = payload.new;
+
+      // dedupe (if we already rendered our optimistic message)
       if (
         LAST_SENT &&
         CURRENT_USER_ID &&
@@ -212,24 +209,35 @@ async function startRealtime(sb) {
         return;
       }
 
-      clearEmptyStateIfNeeded();
-
-      const shouldStick = isNearBottom(chatBody);
-      chatBody.appendChild(renderMessageRow(n));
-
-      while (chatBody.children.length > 60) {
-        chatBody.removeChild(chatBody.firstElementChild);
-      }
-
-      if (shouldStick) scrollToBottom(chatBody);
+      appendMessageToUI(n);
     }
   );
 
-  const { error } = await realtimeChannel.subscribe((status) => {
-    // handy when debugging:
-    // console.log("[Chat] realtime status:", status, "room:", roomAtSubscribe);
-  });
+  // 2) Broadcast fallback (works even if postgres_changes is late on some clients)
+  realtimeChannel.on(
+    "broadcast",
+    { event: "new_msg" },
+    ({ payload }) => {
+      if (!payload) return;
+      if (roomAtSubscribe !== ACTIVE_ROOM) return;
 
+      // dedupe for sender
+      if (
+        LAST_SENT &&
+        CURRENT_USER_ID &&
+        payload.user_id === CURRENT_USER_ID &&
+        payload.room === LAST_SENT.room &&
+        payload.content === LAST_SENT.content &&
+        (Date.now() - LAST_SENT.atMs) < 15000
+      ) {
+        return;
+      }
+
+      appendMessageToUI(payload);
+    }
+  );
+
+  const { error } = await realtimeChannel.subscribe();
   if (error) console.error("[Chat] subscribe error:", error);
 }
 
@@ -242,29 +250,6 @@ async function setupAuth(sb) {
     CURRENT_USER_ID = session?.user?.id || null;
     setChatEnabled(!!session);
   });
-}
-
-function appendOptimisticMessage({ user_id, username, content, room }) {
-  if (!chatBody) return;
-
-  clearEmptyStateIfNeeded();
-
-  const msg = {
-    created_at: new Date().toISOString(),
-    user_id,
-    username,
-    content,
-    room
-  };
-
-  const shouldStick = isNearBottom(chatBody);
-  chatBody.appendChild(renderMessageRow(msg));
-
-  while (chatBody.children.length > 60) {
-    chatBody.removeChild(chatBody.firstElementChild);
-  }
-
-  if (shouldStick) scrollToBottom(chatBody);
 }
 
 async function sendMessage(sb) {
@@ -281,9 +266,20 @@ async function sendMessage(sb) {
   const content = text.slice(0, 300);
   const username = getDisplayName(user);
 
-  const { error } = await sb
-    .from(CHAT_TABLE)
-    .insert([{ content, username, user_id: user.id, room: ACTIVE_ROOM }]);
+  const row = {
+    created_at: new Date().toISOString(),
+    user_id: user.id,
+    username,
+    content,
+    room: ACTIVE_ROOM
+  };
+
+  const { error } = await sb.from(CHAT_TABLE).insert([{
+    content,
+    username,
+    user_id: user.id,
+    room: ACTIVE_ROOM
+  }]);
 
   if (error) {
     console.error("[Chat] insert error:", error);
@@ -291,15 +287,29 @@ async function sendMessage(sb) {
     return;
   }
 
-  // ✅ FIX: show immediately (even if realtime is late / not working)
+  // ✅ show instantly for sender
   LAST_SENT = { room: ACTIVE_ROOM, content, atMs: Date.now() };
-  appendOptimisticMessage({ user_id: user.id, username, content, room: ACTIVE_ROOM });
+  appendMessageToUI(row);
+
+  // ✅ broadcast to everyone in the room (instant, no refresh)
+  try {
+    if (realtimeChannel) {
+      await realtimeChannel.send({
+        type: "broadcast",
+        event: "new_msg",
+        payload: row
+      });
+    }
+  } catch (e) {
+    // not fatal
+    console.warn("[Chat] broadcast send failed:", e?.message || e);
+  }
 
   chatMessage.value = "";
 }
 
-// ===== PUBLIC API: change room =====
-window.setChatRoom = async function (roomId) {
+// Public API for stream overlay
+window.setChatRoom = async function(roomId) {
   const next = normalizeRoom(roomId);
   if (next === ACTIVE_ROOM) return;
 
@@ -312,7 +322,7 @@ window.setChatRoom = async function (roomId) {
   await startRealtime(sb);
 };
 
-(async function initChat() {
+(async function initChat(){
   const sb = await getClient();
   if (!sb) return;
 
