@@ -1,8 +1,7 @@
 /* chat.js — Fightzone realtime chat (Supabase)
    - Reads last messages
-   - Subscribes to new messages via Realtime (postgres_changes)
-   - Also broadcasts new messages for instant updates across tabs/users
-   - Allows sending only for authenticated users
+   - Tries realtime (postgres_changes + broadcast)
+   - Fallback: polling (fetch new messages every 2s) so ALL users see without refresh
 */
 
 const CHAT_SUPABASE_URL = "https://ghvcxourgfbjdtzxqkox.supabase.co";
@@ -44,25 +43,26 @@ function scrollToBottom(el) {
   el.scrollTop = el.scrollHeight;
 }
 
-// UI
 const chatBody = document.getElementById("chatBody");
 const chatForm = document.getElementById("chatForm");
 const chatMessage = document.getElementById("chatMessage");
 const chatHint = document.getElementById("chatHint");
 
-// Rooms
 let ACTIVE_ROOM = "global";
 let realtimeChannel = null;
 
-// Current user + dedupe
 let CURRENT_USER_ID = null;
 let LAST_SENT = null; // { room, content, atMs }
 
-// Helper
+// polling state
+let POLL_TIMER = null;
+let LAST_SEEN_CREATED_AT = null; // ISO string for ACTIVE_ROOM
+
 function normalizeRoom(roomId) {
   const r = String(roomId || "").trim();
   return r ? r : "global";
 }
+
 function getDisplayName(user) {
   const md = user?.user_metadata || {};
   const custom = md?.custom_claims || md?.customClaims || md?.custom_claim || null;
@@ -128,8 +128,6 @@ function showEmptyState() {
 
 function appendMessageToUI(msg) {
   if (!chatBody) return;
-
-  // room guard
   if (msg?.room && msg.room !== ACTIVE_ROOM) return;
 
   clearSysIfNeeded();
@@ -142,6 +140,12 @@ function appendMessageToUI(msg) {
   }
 
   if (shouldStick) scrollToBottom(chatBody);
+}
+
+function updateLastSeenFromArray(arr) {
+  if (!arr || arr.length === 0) return;
+  const last = arr[arr.length - 1];
+  if (last?.created_at) LAST_SEEN_CREATED_AT = last.created_at;
 }
 
 async function loadRecent(sb) {
@@ -161,6 +165,7 @@ async function loadRecent(sb) {
   }
 
   if (!data || data.length === 0) {
+    LAST_SEEN_CREATED_AT = null;
     showEmptyState();
     return;
   }
@@ -168,12 +173,56 @@ async function loadRecent(sb) {
   chatBody.innerHTML = "";
   for (const msg of data) chatBody.appendChild(renderMessageRow(msg));
   scrollToBottom(chatBody);
+
+  updateLastSeenFromArray(data);
+}
+
+async function loadNewSince(sb) {
+  if (!sb || !chatBody) return;
+
+  // If we don't know last seen yet — just do full load once
+  if (!LAST_SEEN_CREATED_AT) {
+    await loadRecent(sb);
+    return;
+  }
+
+  const { data, error } = await sb
+    .from(CHAT_TABLE)
+    .select("id, created_at, user_id, username, content, room")
+    .eq("room", ACTIVE_ROOM)
+    .gt("created_at", LAST_SEEN_CREATED_AT)
+    .order("created_at", { ascending: true })
+    .limit(50);
+
+  if (error) {
+    console.warn("[Chat] poll loadNewSince error:", error?.message || error);
+    return;
+  }
+
+  if (!data || data.length === 0) return;
+
+  for (const msg of data) appendMessageToUI(msg);
+  updateLastSeenFromArray(data);
+}
+
+function startPolling(sb) {
+  stopPolling();
+  // каждые 2 секунды подтягиваем новые сообщения
+  POLL_TIMER = setInterval(() => {
+    loadNewSince(sb);
+  }, 2000);
+}
+
+function stopPolling() {
+  if (POLL_TIMER) {
+    clearInterval(POLL_TIMER);
+    POLL_TIMER = null;
+  }
 }
 
 async function startRealtime(sb) {
   if (!sb) return;
 
-  // remove previous
   if (realtimeChannel) {
     try { await sb.removeChannel(realtimeChannel); } catch (_e) {}
     realtimeChannel = null;
@@ -182,7 +231,7 @@ async function startRealtime(sb) {
   const roomAtSubscribe = ACTIVE_ROOM;
   realtimeChannel = sb.channel("fightzone-chat-" + roomAtSubscribe);
 
-  // 1) Postgres changes (best case)
+  // postgres_changes
   realtimeChannel.on(
     "postgres_changes",
     {
@@ -197,7 +246,7 @@ async function startRealtime(sb) {
 
       const n = payload.new;
 
-      // dedupe (if we already rendered our optimistic message)
+      // dedupe for sender
       if (
         LAST_SENT &&
         CURRENT_USER_ID &&
@@ -205,15 +254,14 @@ async function startRealtime(sb) {
         n.room === LAST_SENT.room &&
         n.content === LAST_SENT.content &&
         (Date.now() - LAST_SENT.atMs) < 15000
-      ) {
-        return;
-      }
+      ) return;
 
       appendMessageToUI(n);
+      if (n?.created_at) LAST_SEEN_CREATED_AT = n.created_at;
     }
   );
 
-  // 2) Broadcast fallback (works even if postgres_changes is late on some clients)
+  // broadcast
   realtimeChannel.on(
     "broadcast",
     { event: "new_msg" },
@@ -221,7 +269,6 @@ async function startRealtime(sb) {
       if (!payload) return;
       if (roomAtSubscribe !== ACTIVE_ROOM) return;
 
-      // dedupe for sender
       if (
         LAST_SENT &&
         CURRENT_USER_ID &&
@@ -229,11 +276,10 @@ async function startRealtime(sb) {
         payload.room === LAST_SENT.room &&
         payload.content === LAST_SENT.content &&
         (Date.now() - LAST_SENT.atMs) < 15000
-      ) {
-        return;
-      }
+      ) return;
 
       appendMessageToUI(payload);
+      if (payload?.created_at) LAST_SEEN_CREATED_AT = payload.created_at;
     }
   );
 
@@ -287,11 +333,12 @@ async function sendMessage(sb) {
     return;
   }
 
-  // ✅ show instantly for sender
+  // show immediately for sender
   LAST_SENT = { room: ACTIVE_ROOM, content, atMs: Date.now() };
   appendMessageToUI(row);
+  LAST_SEEN_CREATED_AT = row.created_at;
 
-  // ✅ broadcast to everyone in the room (instant, no refresh)
+  // broadcast to others (if WS works)
   try {
     if (realtimeChannel) {
       await realtimeChannel.send({
@@ -301,25 +348,27 @@ async function sendMessage(sb) {
       });
     }
   } catch (e) {
-    // not fatal
+    // not fatal; polling will still bring it to others
     console.warn("[Chat] broadcast send failed:", e?.message || e);
   }
 
   chatMessage.value = "";
 }
 
-// Public API for stream overlay
+// public API for stream overlay
 window.setChatRoom = async function(roomId) {
   const next = normalizeRoom(roomId);
   if (next === ACTIVE_ROOM) return;
 
   ACTIVE_ROOM = next;
+  LAST_SEEN_CREATED_AT = null;
 
   const sb = await getClient();
   if (!sb) return;
 
   await loadRecent(sb);
   await startRealtime(sb);
+  startPolling(sb);
 };
 
 (async function initChat(){
@@ -329,6 +378,9 @@ window.setChatRoom = async function(roomId) {
   await setupAuth(sb);
   await loadRecent(sb);
   await startRealtime(sb);
+
+  // ✅ ALWAYS enable polling fallback (so other users see without refresh)
+  startPolling(sb);
 
   if (chatForm) {
     chatForm.addEventListener("submit", async (e) => {
