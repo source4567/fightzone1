@@ -163,6 +163,11 @@ async function startRealtime(sb){
 
       const shouldStick = isNearBottom(chatBody);
       chatBody.appendChild(renderMessageRow(payload.new));
+      
+       // максимум 60 сообщений
+      while (chatBody.children.length > 60) {
+      chatBody.removeChild(chatBody.firstElementChild);
+      }
 
       if (shouldStick) scrollToBottom(chatBody);
     }
