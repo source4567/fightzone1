@@ -1390,7 +1390,7 @@ body.is-modal-open{
 
 /* ===== CHAT MESSAGES: INLINE "name: message" (OVERRIDE) ===== */
 .chat-msg{
-  padding:6px 6px !important;
+  padding:4px 6px !important;
   border-bottom:none !important;
 }
 
