@@ -161,7 +161,7 @@
 
       const eventId = String(eventIdMaybe || "").trim();
       if (planNorm === "one_time" && !eventId) {
-        alert("Открой событие (стрим) и покупай one-time доступ там.");
+        alert("Open the event (stream) and buy one-time access there.");
         return;
       }
 
@@ -289,3 +289,4 @@
     startCheckout,
   };
 })();
+
