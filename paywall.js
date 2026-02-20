@@ -1,14 +1,13 @@
 /* Fightzone Paywall (overlay on top of stream)
-   - requires window.supabaseClient (from auth.js)
+   - works with either window.supabaseClient OR window.supabase (fallback)
    - checks access via RPC: has_access(p_event_id)
-   - purchase flow (CORRECT):
+   - purchase flow:
        button -> POST WORKER /api/checkout with Authorization Bearer (supabase access token)
        worker -> creates Stripe Checkout Session with metadata { user_id, plan, event_id }
        browser -> redirect to Stripe session url
 */
 
 (function () {
-  // твой домен воркера
   const WORKER_BASE = "https://fightzone2.godzilammd.workers.dev";
   const CHECKOUT_ENDPOINT = `${WORKER_BASE}/api/checkout`;
 
@@ -55,8 +54,11 @@
   }
 
   function getSb() {
-    const sb = window.supabaseClient;
-    if (!sb) console.warn("[paywall] window.supabaseClient not found (auth.js not loaded yet?)");
+    // ✅ fallback: some projects use window.supabase instead of window.supabaseClient
+    const sb = window.supabaseClient || window.supabase;
+    if (!sb) {
+      console.warn("[paywall] Supabase client not found. Expected window.supabaseClient OR window.supabase");
+    }
     return sb;
   }
 
@@ -64,21 +66,38 @@
     const sb = getSb();
     if (!sb) return null;
 
-    const { data, error } = await sb.auth.getSession();
-    if (error) {
-      console.warn("[paywall] getSession error:", error);
+    try {
+      const { data, error } = await sb.auth.getSession();
+      if (error) {
+        console.warn("[paywall] getSession error:", error);
+        return null;
+      }
+      return data?.session?.access_token || null;
+    } catch (e) {
+      console.warn("[paywall] getSession threw:", e);
       return null;
     }
-    return data?.session?.access_token || null;
+  }
+
+  async function isLoggedIn() {
+    const sb = getSb();
+    if (!sb) return false;
+
+    try {
+      const { data, error } = await sb.auth.getUser();
+      if (error) return false;
+      return !!data?.user;
+    } catch {
+      return false;
+    }
   }
 
   async function checkAccess(eventId) {
     const sb = getSb();
     if (!sb) return false;
 
-    // if not logged in -> no access
-    const { data: auth } = await sb.auth.getUser();
-    if (!auth?.user) return false;
+    const ok = await isLoggedIn();
+    if (!ok) return false;
 
     const { data, error } = await sb.rpc("has_access", { p_event_id: eventId });
     if (error) {
@@ -95,12 +114,10 @@
   }
 
   async function pollAfterReturnIfNeeded() {
-    // если вернулись после оплаты (worker добавляет paid=1)
     const url = new URL(window.location.href);
     const paid = url.searchParams.get("paid");
     if (paid !== "1") return;
 
-    // пробуем несколько раз, потому что вебхук может записать не мгновенно
     for (let i = 0; i < 12; i++) {
       await refresh();
       const visible = _overlayEl?.classList.contains("is-visible");
@@ -108,7 +125,6 @@
       await new Promise((r) => setTimeout(r, 1000));
     }
 
-    // убрать paid=1 из URL
     url.searchParams.delete("paid");
     window.history.replaceState({}, "", url.toString());
   }
@@ -124,7 +140,6 @@
         return;
       }
 
-      // one_time требует event_id
       const eventId = String(eventIdMaybe || "").trim();
       if (planNorm === "one_time" && !eventId) {
         alert("Открой событие (стрим) и покупай one-time доступ там.");
@@ -133,11 +148,13 @@
 
       const token = await getAccessToken();
       if (!token) {
-        alert("Please login first.");
+        // ✅ более понятная диагностика
+        const sbExists = !!(window.supabaseClient || window.supabase);
+        console.warn("[paywall] Missing access token. sb exists:", sbExists);
+        alert("Please login first (token not found). Try logout/login once.");
         return;
       }
 
-      // UI hint если это overlay покупка
       const hint = _overlayEl?.querySelector("[data-fz-hint]");
       const overlayBtn = _overlayEl?.querySelector("[data-fz-purchase]");
       if (hint) hint.style.display = "block";
@@ -151,9 +168,7 @@
         return_to: returnTo,
       };
 
-      if (planNorm === "one_time") {
-        body.event_id = eventId;
-      }
+      if (planNorm === "one_time") body.event_id = eventId;
 
       const res = await fetch(CHECKOUT_ENDPOINT, {
         method: "POST",
@@ -176,7 +191,6 @@
         return;
       }
 
-      // редирект на Stripe Checkout
       window.location.href = data.url;
     } catch (e) {
       console.warn("[paywall] startCheckout failed:", e);
@@ -191,32 +205,34 @@
   }
 
   function bindVipButtons() {
-    // VIP page buttons: require data-plan="pass|elite|one_time"
     const vipPage = document.getElementById("page-vip");
     if (!vipPage) return;
 
-    vipPage.addEventListener("click", async (e) => {
-      const btn = e.target && e.target.closest ? e.target.closest(".vip-btn[data-plan]") : null;
-      if (!btn) return;
+    vipPage.addEventListener(
+      "click",
+      async (e) => {
+        const btn = e.target?.closest?.(".vip-btn[data-plan]");
+        if (!btn) return;
 
-      e.preventDefault();
-      e.stopPropagation();
+        e.preventDefault();
+        e.stopPropagation();
 
-      const plan = btn.getAttribute("data-plan");
+        const plan = btn.getAttribute("data-plan");
 
-      // one_time from VIP page needs event opened
-      if (plan === "one_time") {
-        await startCheckout("one_time", _currentEventId);
-        return;
-      }
+        if (plan === "one_time") {
+          await startCheckout("one_time", _currentEventId);
+          return;
+        }
 
-      if (plan === "pass" || plan === "elite") {
-        await startCheckout(plan);
-        return;
-      }
+        if (plan === "pass" || plan === "elite") {
+          await startCheckout(plan);
+          return;
+        }
 
-      alert("Unknown plan: " + plan);
-    }, true);
+        alert("Unknown plan: " + plan);
+      },
+      true
+    );
   }
 
   function initPaywall(options = {}) {
@@ -230,9 +246,8 @@
     }
 
     _overlayEl = ensureOverlay(_container);
-    _overlayEl.classList.remove("is-visible"); // hidden until we know eventId
+    _overlayEl.classList.remove("is-visible");
 
-    // update paywall on auth changes
     const sb = getSb();
     if (sb && !_authUnsub) {
       const { data } = sb.auth.onAuthStateChange(() => {
@@ -262,6 +277,6 @@
   window.FZPaywall = {
     initPaywall,
     showForEvent,
-    startCheckout, // optional, if you want to call manually
+    startCheckout,
   };
 })();
