@@ -1,10 +1,13 @@
 /* Fightzone Paywall (overlay on top of stream)
-   - works with either window.supabaseClient OR window.supabase (fallback)
-   - checks access via RPC: has_access(p_event_id)
-   - purchase flow:
-       button -> POST WORKER /api/checkout with Authorization Bearer (supabase access token)
-       worker -> creates Stripe Checkout Session with metadata { user_id, plan, event_id }
-       browser -> redirect to Stripe session url
+   - uses Supabase session access_token to call Worker /api/checkout
+   - robust against "logged in but token not found" by retrying + refreshSession()
+
+   Requires:
+   - auth.js exposes window.supabaseClient or window.sb
+   - RPC: has_access(p_event_id)
+
+   Worker:
+   - https://fightzone2.godzilammd.workers.dev/api/checkout
 */
 
 (function () {
@@ -16,6 +19,72 @@
   let _currentEventId = null;
   let _authUnsub = null;
   let _isBuying = false;
+
+  function sleep(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+  }
+
+  function getSb() {
+    // robust: support both exports
+    const sb = window.supabaseClient || window.sb || window.supabase;
+    if (!sb || !sb.auth) {
+      console.warn("[paywall] Supabase client not ready. Expected window.supabaseClient or window.sb");
+      return null;
+    }
+    return sb;
+  }
+
+  async function getAccessToken() {
+    const sb = getSb();
+    if (!sb) return null;
+
+    try {
+      // 1) normal read
+      let { data, error } = await sb.auth.getSession();
+      if (error) console.warn("[paywall] getSession error:", error);
+      let token = data?.session?.access_token || null;
+      if (token) return token;
+
+      // 2) sometimes session is not restored yet right after page load
+      await sleep(150);
+      ({ data, error } = await sb.auth.getSession());
+      if (error) console.warn("[paywall] getSession retry error:", error);
+      token = data?.session?.access_token || null;
+      if (token) return token;
+
+      // 3) if user exists but session null -> refresh
+      const u = await sb.auth.getUser();
+      const user = u?.data?.user || null;
+      if (!user) return null;
+
+      if (typeof sb.auth.refreshSession === "function") {
+        const rr = await sb.auth.refreshSession();
+        if (rr?.error) console.warn("[paywall] refreshSession error:", rr.error);
+      }
+
+      ({ data, error } = await sb.auth.getSession());
+      if (error) console.warn("[paywall] getSession after refresh error:", error);
+      return data?.session?.access_token || null;
+    } catch (e) {
+      console.warn("[paywall] getAccessToken threw:", e);
+      return null;
+    }
+  }
+
+  async function checkAccess(eventId) {
+    const sb = getSb();
+    if (!sb) return false;
+
+    const { data: authData } = await sb.auth.getUser();
+    if (!authData?.user) return false;
+
+    const { data, error } = await sb.rpc("has_access", { p_event_id: eventId });
+    if (error) {
+      console.warn("[paywall] has_access error:", error);
+      return false;
+    }
+    return !!data;
+  }
 
   function ensureOverlay(containerEl) {
     const st = getComputedStyle(containerEl);
@@ -53,60 +122,6 @@
     return el;
   }
 
-  function getSb() {
-    // ✅ fallback: some projects use window.supabase instead of window.supabaseClient
-    const sb = window.supabaseClient || window.supabase;
-    if (!sb) {
-      console.warn("[paywall] Supabase client not found. Expected window.supabaseClient OR window.supabase");
-    }
-    return sb;
-  }
-
-  async function getAccessToken() {
-    const sb = getSb();
-    if (!sb) return null;
-
-    try {
-      const { data, error } = await sb.auth.getSession();
-      if (error) {
-        console.warn("[paywall] getSession error:", error);
-        return null;
-      }
-      return data?.session?.access_token || null;
-    } catch (e) {
-      console.warn("[paywall] getSession threw:", e);
-      return null;
-    }
-  }
-
-  async function isLoggedIn() {
-    const sb = getSb();
-    if (!sb) return false;
-
-    try {
-      const { data, error } = await sb.auth.getUser();
-      if (error) return false;
-      return !!data?.user;
-    } catch {
-      return false;
-    }
-  }
-
-  async function checkAccess(eventId) {
-    const sb = getSb();
-    if (!sb) return false;
-
-    const ok = await isLoggedIn();
-    if (!ok) return false;
-
-    const { data, error } = await sb.rpc("has_access", { p_event_id: eventId });
-    if (error) {
-      console.warn("[paywall] has_access error:", error);
-      return false;
-    }
-    return !!data;
-  }
-
   async function refresh() {
     if (!_overlayEl || !_currentEventId) return;
     const allowed = await checkAccess(_currentEventId);
@@ -118,11 +133,12 @@
     const paid = url.searchParams.get("paid");
     if (paid !== "1") return;
 
+    // allow webhook time to write
     for (let i = 0; i < 12; i++) {
       await refresh();
       const visible = _overlayEl?.classList.contains("is-visible");
       if (!visible) break;
-      await new Promise((r) => setTimeout(r, 1000));
+      await sleep(1000);
     }
 
     url.searchParams.delete("paid");
@@ -132,6 +148,9 @@
   async function startCheckout(plan, eventIdMaybe) {
     if (_isBuying) return;
     _isBuying = true;
+
+    const hint = _overlayEl?.querySelector("[data-fz-hint]");
+    const overlayBtn = _overlayEl?.querySelector("[data-fz-purchase]");
 
     try {
       const planNorm = String(plan || "").trim();
@@ -146,19 +165,14 @@
         return;
       }
 
+      if (hint) hint.style.display = "block";
+      if (overlayBtn && planNorm === "one_time") overlayBtn.disabled = true;
+
       const token = await getAccessToken();
       if (!token) {
-        // ✅ более понятная диагностика
-        const sbExists = !!(window.supabaseClient || window.supabase);
-        console.warn("[paywall] Missing access token. sb exists:", sbExists);
         alert("Please login first (token not found). Try logout/login once.");
         return;
       }
-
-      const hint = _overlayEl?.querySelector("[data-fz-hint]");
-      const overlayBtn = _overlayEl?.querySelector("[data-fz-purchase]");
-      if (hint) hint.style.display = "block";
-      if (overlayBtn && planNorm === "one_time") overlayBtn.disabled = true;
 
       const baseUrl = window.location.href.split("#")[0];
       const returnTo = baseUrl + "#vip";
@@ -167,7 +181,6 @@
         plan: planNorm,
         return_to: returnTo,
       };
-
       if (planNorm === "one_time") body.event_id = eventId;
 
       const res = await fetch(CHECKOUT_ENDPOINT, {
@@ -180,14 +193,9 @@
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
+      if (!res.ok || !data?.url) {
         console.warn("[paywall] checkout error:", data);
         alert(data?.error || "Checkout error");
-        return;
-      }
-
-      if (!data?.url) {
-        alert("No checkout URL returned");
         return;
       }
 
@@ -196,8 +204,6 @@
       console.warn("[paywall] startCheckout failed:", e);
       alert(String(e?.message || e));
     } finally {
-      const hint = _overlayEl?.querySelector("[data-fz-hint]");
-      const overlayBtn = _overlayEl?.querySelector("[data-fz-purchase]");
       if (hint) hint.style.display = "none";
       if (overlayBtn) overlayBtn.disabled = false;
       _isBuying = false;
@@ -246,7 +252,7 @@
     }
 
     _overlayEl = ensureOverlay(_container);
-    _overlayEl.classList.remove("is-visible");
+    _overlayEl.classList.remove("is-visible"); // hidden until we know eventId
 
     const sb = getSb();
     if (sb && !_authUnsub) {
@@ -257,6 +263,9 @@
     }
 
     bindVipButtons();
+
+    // if user returned from Stripe, attempt refresh
+    pollAfterReturnIfNeeded();
   }
 
   async function showForEvent(eventId) {
