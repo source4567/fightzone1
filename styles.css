@@ -55,7 +55,7 @@ img, video{
   top:0;
   z-index:10000;
   backdrop-filter:blur(12px);
-  background:rgba(7,10,18,.65);
+  background:rgba(7,10,18,.71);
   border-bottom:1px solid var(--stroke);
   padding:7px 0;
 }
