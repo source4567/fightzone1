@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Fightzone</title>
+<link href="./favicon.png?v=3" rel="icon" sizes="32x32" type="image/png"/>
+<!-- Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Site CSS -->
+<link href="styles.css" rel="stylesheet"/>
+<link rel="stylesheet" href="./paywall.css">
+
+<style>
+    .card__timer.is-live{display:inline-flex;align-items:center;gap:6px}
+    .card__timer.is-live .live-dot{width:8px;height:8px;border-radius:50%;background:#ff3b3b;display:inline-block}
+  </style>
+<!-- Request page styles (kept here for stability) -->
+<style>
+    .page{ display:none; }
+    .page.is-active{ display:block; }
+
+    .request-wrap{
+      min-height: calc(100vh - 120px);
+      display:flex;
+      justify-content:center;
+      align-items:flex-start;
+      padding: 56px 0 80px;
+    }
+
+    .request-card{
+      width: 100%;
+      max-width: 100%;
+      background: rgba(10,12,16,.72);
+      border: 1px solid rgba(96,165,250,.25);
+      border-radius: 12px;
+      box-shadow: 0 24px 80px rgba(0,0,0,.55);
+      overflow:hidden;
+    }
+
+    .request-head{
+      padding: 22px 26px 18px;
+      border-bottom: 1px solid rgba(96,165,250,.18);
+    }
+
+    .request-title{
+      margin:0;
+      font-size: 22px;
+      font-weight: 700;
+      color:#eaf0ff;
+    }
+
+    .request-sub{
+      margin: 6px 0 0;
+      font-size: 13px;
+      color: rgba(234,240,255,.65);
+    }
+
+    .request-body{
+      padding: 22px 26px 26px;
+    }
+
+    .form-row{ margin-top: 14px; }
+
+    .form-label{
+      display:block;
+      font-size: 13px;
+      font-weight: 600;
+      color: rgba(234,240,255,.85);
+      margin-bottom: 8px;
+    }
+
+    .form-input{
+      width:100%;
+      height: 44px;
+      padding: 0 14px;
+      background: #0b0e14;
+      border: 1px solid rgba(96,165,250,.18);
+      border-radius: 6px;
+      color:#fff;
+      outline:none;
+      font-family: Inter, system-ui, sans-serif;
+      font-size: 14px;
+      transition: border-color .2s ease, background .2s ease;
+    }
+
+    .form-input::placeholder{ color: rgba(255,255,255,.35); }
+
+    .form-input:focus{
+      border-color: rgba(96,165,250,.55);
+      background:#0d111a;
+    }
+
+    .form-help{
+      margin-top: 8px;
+      font-size: 12px;
+      color: rgba(234,240,255,.55);
+    }
+
+    .type-row{
+      display:flex;
+      gap: 22px;
+      align-items:center;
+      margin-top: 8px;
+      color: rgba(234,240,255,.75);
+      font-size: 14px;
+    }
+
+    .type-row input{ transform: translateY(1px); }
+
+    .request-actions{ margin-top: 22px; }
+
+    .request-btn{
+      width:100%;
+      height: 44px;
+      border-radius: 6px;
+      border: 0;
+      cursor:pointer;
+      background: rgba(37,99,235,.35);
+      color:#eaf0ff;
+      font-weight: 600;
+      font-family: Inter, system-ui, sans-serif;
+      transition: background .2s ease, transform .05s ease;
+    }
+
+    .request-btn:hover{ background: rgba(37,99,235,.5); }
+    .request-btn:active{ transform: translateY(1px); }
+  
+    .request-stack{
+      width: 100%;
+      max-width: 760px;
+      display:flex;
+      flex-direction:column;
+      gap: 28px;
+      margin: 0 auto;
+      min-width:0;
+    }
+</style>
+<style>
+    /* CRITICAL FALLBACK (if styles.css fails to load) */
+    *,*::before,*::after{box-sizing:border-box}
+    html,body{margin:0;padding:0;overflow-x:hidden}
+    body{background:#070a12;color:#eaf0ff;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+
+    /* Hide stream overlay by default even without external CSS */
+    /* Hide stream overlay by default even without external CSS */
+    .stream-overlay{display:none;position:fixed;top:var(--topbar-h, 64px);left:0;right:0;bottom:0;background:#000;z-index:15000;}
+    .stream-overlay.active{display:flex}
+    .stream-player-box{position:relative;width:100%;height:100%}
+
+    /* Placeholder must cover the video (hide stream) */
+    .stream-placeholder{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;background:rgba(0,0,0,.85);color:#fff;text-align:center;padding:24px;z-index:6}
+    .stream-placeholder.is-on{display:flex}
+  </style>
+<style>
+/* Live label inside card timer */
+.liveDotSmall{
+  display:inline-block;
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:#ff3b3b;
+  margin-right:6px;
+  transform: translateY(-1px);
+}
+</style></head>
+<body>
+<!-- STREAM SCREEN (overlay) -->
+<div class="stream-overlay" id="streamOverlay">
+<!-- LEFT: VIDEO + INFO -->
+<div class="stream-main">
+<div class="stream-video">
+<div class="stream-player-box">
+<div class="stream-placeholder" id="streamPlaceholder">
+<div class="ph-title" id="phTitle">This event is not live yet</div>
+<div class="ph-timer" id="phTimer">--</div>
+<div class="ph-sub" id="phSub">Starting soon</div>
+</div>
+</div>
+</div>
+<div class="stream-info-bar">
+<div class="stream-title" id="streamTitle"></div>
+<div class="stream-meta" id="streamMeta"></div>
+</div>
+</div>
+<!-- RIGHT: CHAT -->
+<div class="stream-chat">
+<div class="chat-header">
+      chat <span class="chat-status">● connected</span>
+
+  <div class="chat-drag-handle" id="chatDragHandle" aria-hidden="true"></div>
+</div>
+<div class="chat-body" id="chatBody">
+<!-- позже сюда придёт реальный чат -->
+</div>
+<div class="chat-input">
+  <form class="chat-form" id="chatForm" autocomplete="off">
+    <input id="chatMessage" type="text" placeholder="Type a message…" maxlength="300" />
+    <button id="chatSend"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg></button>
+  </form>
+  <div class="chat-hint" id="chatHint">Login to chat.</div>
+</div>
+</div>
+</div>
+
+<header class="topbar">
+<div class="container topbar__inner">
+<div class="topbar__left">
+<div class="topbar__brand">
+<img alt="FZ" src="fz-logo.png"/>
+<span class="brand__name">Fightzone</span>
+</div>
+
+<div class="topbar__nav-wrap">
+<nav class="topbar__nav">
+<a class="nav__item nav-main active" data-page="main" href="#">Main</a>
+<a class="nav__item nav-request" data-page="request" href="#">Request</a>
+<a class="nav__item nav-vip" data-page="vip" href="#">VIP</a>
+<a class="nav__item nav-archive" data-page="archive" href="#">Archive (VODs)</a>
+<a class="nav__item nav-discord" href="https://discord.gg/FyPCV9AaJf" rel="noopener noreferrer" target="_blank">Discord</a>
+</nav>
+</div>
+
+<div class="auth-actions">
+  <button class="auth-btn auth-btn--login" id="btnLogin" type="button">Login</button>
+  <button class="auth-btn auth-btn--logout" class="auth-btn auth-btn--register" id="btnRegister" type="button">Sign up</button>
+</div>
+
+</div>
+</div>
+</header>
+
+<!-- AUTH MODAL -->
+<div class="auth-modal" id="authModal" aria-hidden="true">
+  <div class="auth-modal__backdrop" data-auth-close="1"></div>
+
+  <div class="auth-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
+    <button class="auth-modal__close" type="button" aria-label="Close" data-auth-close="1">×</button>
+
+    <!-- LOGIN -->
+    <div class="auth-card" id="authLoginCard">
+      <div class="auth-card__head">
+        <h2 class="auth-card__title" id="authModalTitle">Welcome back!</h2>
+        <div class="auth-card__sub">Sign in to your account</div>
+      </div>
+
+      <div class="auth-card__body">
+        <form id="loginForm" autocomplete="on">
+          <div class="auth-field">
+            <label class="auth-label" for="loginEmail">Username or Email</label>
+            <div class="auth-input">
+              <span class="auth-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M4 6.5h16v11H4v-11Z" stroke="currentColor" stroke-width="2" />
+                  <path d="M4 7l8 6 8-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <input id="loginEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email" required />
+            </div>
+          </div>
+
+          <div class="auth-field">
+            <label class="auth-label" for="loginPassword">Password</label>
+            <div class="auth-input">
+              <span class="auth-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M7 10V8a5 5 0 0 1 10 0v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  <path d="M6.5 10.5h11V20h-11v-9.5Z" stroke="currentColor" stroke-width="2"/>
+                </svg>
+              </span>
+              <input id="loginPassword" name="password" type="password" placeholder="••••••••" autocomplete="current-password" required />
+            </div>
+          </div>
+
+          <button class="auth-primary" type="submit">Sign in</button>
+        </form>
+
+        <div class="auth-divider">
+          <span>or login with</span>
+        </div>
+
+        <div class="auth-oauth">
+          <button
+           type="button"
+           class="auth-oauth__btn auth-oauth__btn--discord"
+           id="btnLoginDiscord"
+           aria-label="Continue with Discord"
+           >
+           <span class="oauth-ic" aria-hidden="true">
+             <img src="discord.png" alt="" width="22" height="22">
+           </span>
+           <span class="oauth-text">Discord</span>
+          </button>
+        </div>
+
+
+        <div class="auth-foot">
+          <span>Lost your password?</span>
+          <a class="auth-link" href="#" id="btnRecover">Reset password</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- REGISTER -->
+<div class="auth-card" id="authRegisterCard" hidden>
+  <div class="auth-card__head">
+    <h2 class="auth-card__title">Welcome!</h2>
+    <div class="auth-card__sub">Register a new account</div>
+  </div>
+
+  <div class="auth-card__body">
+    <form id="registerForm" autocomplete="on">
+      <div class="auth-grid-2">
+        <div class="auth-field">
+          <label class="auth-label" for="regUsername">Username</label>
+          <div class="auth-input">
+            <span class="auth-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M20 21v-1.2c0-2.3-2.7-4.3-8-4.3s-8 2-8 4.3V21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" stroke-width="2"/>
+              </svg>
+            </span>
+            <input id="regUsername" name="username" type="text" placeholder="Username" autocomplete="username" required />
+          </div>
+        </div>
+
+        <div class="auth-field">
+          <label class="auth-label" for="regEmail">Email</label>
+          <div class="auth-input">
+            <span class="auth-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M4 6.5h16v11H4v-11Z" stroke="currentColor" stroke-width="2" />
+                <path d="M4 7l8 6 8-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <input id="regEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email" required />
+          </div>
+        </div>
+
+        <div class="auth-field">
+          <label class="auth-label" for="regPassword">Password</label>
+          <div class="auth-input">
+            <span class="auth-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M7 10V8a5 5 0 0 1 10 0v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M6.5 10.5h11V20h-11v-9.5Z" stroke="currentColor" stroke-width="2"/>
+              </svg>
+            </span>
+            <input id="regPassword" name="password" type="password" placeholder="••••••••" autocomplete="new-password" required />
+          </div>
+        </div>
+
+        <div class="auth-field">
+          <label class="auth-label" for="regPassword2">Confirm password</label>
+          <div class="auth-input">
+            <span class="auth-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M7 10V8a5 5 0 0 1 10 0v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M6.5 10.5h11V20h-11v-9.5Z" stroke="currentColor" stroke-width="2"/>
+              </svg>
+            </span>
+            <input id="regPassword2" name="password2" type="password" placeholder="••••••••" autocomplete="new-password" required />
+          </div>
+        </div>
+      </div>
+
+      <button class="auth-primary" type="submit">Register</button>
+    </form>
+
+    <div class="auth-divider">
+      <span>or register with</span>
+    </div>
+
+    <div class="auth-oauth">
+     <button
+       type="button"
+       class="auth-oauth__btn auth-oauth__btn--discord"
+       id="btnRegisterDiscord"
+       aria-label="Continue with Discord"
+       >
+       <span class="oauth-ic" aria-hidden="true">
+        <img src="discord.png" alt="" width="22" height="22">
+       </span>
+       <span class="oauth-text">Discord</span>
+      </button>
+    </div>
+
+
+    <div class="auth-foot">
+      <span>Already have an account?</span>
+      <a class="auth-link" href="#" id="btnBackToLogin">Sign in</a>
+    </div>
+  </div>
+</div>
+
+
+  </div>
+</div>
+
+<main class="container">
+<!-- ================= MAIN PAGE ================= -->
+<div class="page is-active" id="page-main">
+<section class="section">
+<h2 class="section__title section__title--live">
+<span class="liveDot"></span>
+        Live
+      </h2>
+<div class="noLiveBox">
+        No events are live right now. Scroll down to see what's on later.
+      </div><div class="cards cards--1-wide live-cards" id="liveCards"></div>
+</section>
+<section class="section">
+<h2 class="section__title">UFC</h2>
+<div class="cards-wrap">
+<button aria-label="Scroll left" class="cards-arrow cards-arrow--left">‹</button>
+<div class="cards cards--1-wide">
+<div class="card" data-event-id="hernandez" data-stream="strickland" data-event="strickland" data-meta="Sunday, Feb 22 · UFC" data-mode="strict" data-start="2026-02-22T00:00:00" data-title="UFC: Strickland vs Hernandez" data-iframe="https://modistreams.org/embed/olympics/2026-02-16/gold-zone-day-10-1771246800  asdasdsa">
+<div class="card__media card__media--image" style="background-image:url('strickland-vs-hernandez-alt-1024x576.jpg')"></div>
+<div class="card__footer">
+<div class="card__title">UFC: Strickland vs Hernandez</div>
+<div class="card__meta">
+<span class="card__source">ESPN</span>
+<div class="card__right">
+<div class="card__date">Sunday, Feb 22</div>
+<div class="card__timer" id="ufc-timer-strickland">--</div>
+</div>
+</div>
+</div>
+</div>
+<div class="card" data-event-id="kavanagh"  data-stream="moreno" data-event="moreno" data-meta="Sunday, Mar 1 · UFC" data-mode="strict" data-start="2026-03-01T00:00:00" data-title="UFC: Moreno vs. Kavanagh"  data-iframe="https://modistreams.org/embed/olympics/2026-02-14/hockey/sweden-vs-slovakia-mens-group-b-1771067400">
+<div class="card__media card__media--image" style="background-image:url('dsfsdfsdfsf.jpg')"></div>
+<div class="card__footer">
+<div class="card__title">UFC: Moreno vs. Kavanagh</div>
+<div class="card__meta">
+<span class="card__source">ESPN</span>
+<div class="card__right">
+<div class="card__date">Sunday, Mar 1</div>
+<div class="card__timer" id="ufc-timer-moreno">--</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="card" data-event-id="oliveira" data-stream="holloway" data-title="UFC 326: Holloway vs. Oliveira 2" data-event="ufc326" data-meta="Saturday, Mar 7 · UFC" data-mode="strict" data-start="2026-03-07T00:00:00">
+  <div class="card__media card__media--image" style="background-image:url('ufc-326-holloway-vs-oliveira-1024x576.jpg')"></div>
+  <div class="card__footer">
+    <div class="card__title">UFC: Holloway vs. Oliveira 2</div>
+    <div class="card__meta">
+      <span class="card__source">ESPN</span>
+      <div class="card__right">
+        <div class="card__date">Saturday, Mar 7</div>
+              <div class="card__timer" id="ufc-timer-ufc326">--</div>
+</div>
+    </div>
+  </div>
+</div>
+
+<div class="card"
+     data-event-id="vallejos"
+     data-stream="emmet"
+     data-event="emmett"
+     data-meta="Saturday, Mar 14 · UFC"
+     data-mode="strict"
+     data-start="2026-03-14T00:00:00"
+     data-title="UFC: Emmett vs. Vallejos">
+    
+  <div class="card__media card__media--image"
+       style="background-image:url('fight-poster-1024x576.jpg')">
+  </div>
+
+  <div class="card__footer">
+    <div class="card__title">UFC: Emmett vs. Vallejos</div>
+
+    <div class="card__meta">
+      <span class="card__source">ESPN</span>
+
+      <div class="card__right">
+        <div class="card__date">Saturday, Mar 14</div>
+        <div class="card__timer" id="ufc-timer-emmett">--</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+</div>
+<button aria-label="Scroll right" class="cards-arrow cards-arrow--right">›</button>
+</div>
+</section>
+<section class="section">
+<h2 class="section__title">Boxing</h2>
+<div class="cards-wrap">
+<button aria-label="Scroll left" class="cards-arrow cards-arrow--left">‹</button>
+<div class="cards cards--1-wide">
+<div class="card" data-event-id="anthony" data-stream="tyson" data-meta="Saturday, Mar 4 · Boxing" data-title="Tyson Fury vs Anthony Joshua">
+<div class="card__media card__media--image" style="background-image:url('joshua-vs-fury-enhanced-1024x576.jpg')"></div>
+<div class="card__footer">
+<div class="card__title">Tyson Fury vs Anthony Joshua</div>
+<div class="card__meta">
+<span class="card__source">PTS</span>
+<div class="card__right">
+<div class="card__date">Saturday, Mar 4</div>
+<div class="card__timer" id="boxing-timer-1">--</div>
+</div>
+</div>
+</div>
+</div>
+<div class="card" data-event-id="makhmudov" data-stream="arslanbek" data-meta="Saturday, Apr 11 · Boxing" data-title="Tyson Fury vs Arslanbek Makhmudov">
+<div class="card__media card__media--image" style="background-image:url('makhmudov-vs-fury-1024x576.jpg')"></div>
+<div class="card__footer">
+<div class="card__title">Tyson Fury vs Arslanbek Makhmudov</div>
+<div class="card__meta">
+<span class="card__source">PTS</span>
+<div class="card__right">
+<div class="card__date">Saturday, Apr 11</div>
+<div class="card__timer" id="boxing-timer-2">--</div>
+</div>
+</div>
+</div>
+</div>
+<div class="card" data-event-id="ryan" data-stream="mario" data-meta="Saturday, Feb 21 · Boxing" data-title="Mario Barrios vs. Ryan Garcia">
+<div class="card__media card__media--image" style="background-image:url('barrios-vs-garcia-1024x576.jpg')"></div>
+<div class="card__footer">
+<div class="card__title">Mario Barrios vs. Ryan Garcia</div>
+<div class="card__meta">
+<span class="card__source">PTS</span>
+<div class="card__right">
+<div class="card__date">Saturday, Feb 21</div>
+<div class="card__timer" id="boxing-timer-3">--</div>
+</div>
+</div>
+</div>
+</div>
+<div class="card" data-event-id="derek" data-stream="deontay" data-meta="Saturday, Apr 4 · Boxing" data-title="Deontay Wilder vs. Derek Chisora">
+<div class="card__media card__media--image" style="background-image:url('wilder-vs-chisora-1024x576.jpg')"></div>
+<div class="card__footer">
+<div class="card__title">Deontay Wilder vs. Derek Chisora</div>
+<div class="card__meta">
+<span class="card__source">PTS</span>
+<div class="card__right">
+<div class="card__date">Saturday, Apr 4</div>
+<div class="card__timer" id="boxing-timer-4">--</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<button aria-label="Scroll right" class="cards-arrow cards-arrow--right">›</button>
+</div>
+</section>
+<section class="section">
+<h2 class="section__title">American Football</h2>
+<div class="cards-wrap">
+<button aria-label="Scroll left" class="cards-arrow cards-arrow--left">‹</button>
+<div class="cards cards--1-wide">
+<div class="card card--coming-soon" data-stream="seattle" data-meta="Coming soon · NFL" data-title="NFL: Event ">
+<div class="card__media card__media--image" style="background-image:url('patriots-vs-seahawks-1024x576.jpg')"></div>
+<div class="card__footer">
+<div class="card__title">Seattle Seahawks vs New England Patriots</div>
+<div class="card__meta">
+<span class="card__source">ASL</span>
+<div class="card__right">
+<div class="card__date">TBA</div>
+</div>
+</div>
+</div>
+</div>
+<div class="card card--coming-soon" data-stream="nfc" data-meta="Coming soon · NFL" data-title="NFL: Event ">
+<div class="card__media card__media--image" style="background-image:url('afc-vs-nfc-pro-bowl-1024x576.jpg')"></div>
+<div class="card__footer">
+<div class="card__title">NFC vs AFC</div>
+<div class="card__meta">
+<span class="card__source">ASL</span>
+<div class="card__right">
+<div class="card__date">TBA</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<button aria-label="Scroll right" class="cards-arrow cards-arrow--right">›</button>
+</div>
+</section>
+</div>
+<!-- ================= REQUEST PAGE ================= -->
+<div class="page" id="page-request">
+<div class="request-wrap">
+<div class="request-stack">
+<div class="request-card">
+<div class="request-head">
+<h2 class="request-title">Request</h2>
+<p class="request-sub">Tell us what event you want to watch.</p>
+</div>
+<div class="request-body">
+<form id="requestForm">
+<div class="form-row">
+<label class="form-label" for="reqEvent">Event name</label>
+<input class="form-input" id="reqEvent" name="event" placeholder="UFC / Boxing / Football..." type="text">
+<div class="form-help">Example: “UFC 326”, “Fury vs Joshua”, “NFL Week 1”.</div>
+</div>
+<div class="form-row">
+<label class="form-label" for="reqLink">Link (optional)</label>
+<input class="form-input" id="reqLink" name="link" placeholder="https://..." type="url"/>
+</div>
+<div class="form-row">
+<label class="form-label">Type</label>
+<div class="type-row">
+<label><input checked="" name="type" type="radio" value="ufc"/> UFC</label>
+<label><input name="type" type="radio" value="boxing"/> Boxing</label>
+<label><input name="type" type="radio" value="other"/> Other</label>
+</div>
+</div>
+<div class="request-actions">
+<button class="request-btn" type="submit">Send request</button>
+</div>
+</form>
+</div>
+</div>
+<div class="request-card">
+<div class="request-head">
+<h1 class="request-title">How it works</h1>
+<p class="request-sub">
+          1) Send a request<br/>
+          2) We check availability<br/>
+          3) If possible — we add it<br/><br/>
+          VIP members get priority.
+        </p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="page" id="page-vip">
+<div class="vip-wrap">
+<!-- VIP Banner -->
+<div class="vip-banner" role="note" aria-label="VIP notice">
+  <div class="vip-banner__line vip-banner__line--top">
+    We recommend logging in with Discord. This allows our bot automatically give you all the perks for the Discord server.
+  </div>
+  <div class="vip-banner__divider" aria-hidden="true"></div>
+  <div class="vip-banner__line vip-banner__line--bottom">
+    <span class="vip-banner__label">Troubleshooting?</span>
+    Join our <a class="vip-banner__link" href="https://discord.gg/caVCzhYE" target="_blank" rel="noopener">Discord</a> server and open a ticket!
+  </div>
+</div>
+
+<div class="vip-grid">
+<div class="vip-card">
+<h3 class="vip-card__title">Fightzone - basic</h3>
+<div class="vip-price">
+<div class="vip-price__main">$2</div>
+<div class="vip-price__sub">/one time</div>
+</div>
+<button class="vip-btn" data-plan="one_time" type="button">Select</button>
+<ul class="vip-features">
+<li>ACCESS TO WATCH ONLY ONE EVENT</li> <li><span class="rainbow">CHAT BOX</span>
+</ul>
+</div>
+<div class="vip-card">
+<h3 class="vip-card__title">Fightzone Pass</h3>
+<div class="vip-price">
+<div class="vip-price__main">$5</div>
+<div class="vip-price__sub">/per month</div>
+</div>
+<button class="vip-btn" data-plan="pass" type="button">Select</button>
+<ul class="vip-features">
+<li><span class="rainbow">ACCESS TO ALL STREAMS UFC/BOXING</span></li><li>HD+ Quality</li> <li>HIGHER DISCORD SUPPORT</li> <li>CHAT BOX </li> <li><span class="rainbow">ZERO ADS / POP UP ADS</span></li>
+</ul>
+</div>
+<div class="vip-card">
+<h3 class="vip-card__title">FightZone Elite Pass</h3>
+<div class="vip-price">
+<div class="vip-price__main">$10</div>
+<div class="vip-price__sub"></div>
+</div>
+<button class="vip-btn" data-plan="elite" type="button">Select</button>
+<ul class="vip-features">
+<li> <span class="rainbow">ALL OF FZ PASS </span></li> <li> <span class="rainbow">ACCESS TO MYSTIC MAC BET BUILDERS/PICKS </span></li> <li class="rainbow">ACCESS TO VODS ON DEMAND STREAMS</li><li><span class="rainbow">ACCESS TO ALL STREAMS UFC/BOXING</span></li><li>HD+ Quality</li> <li>HIGHER DISCORD SUPPORT</li> <li>CHAT BOX </li> <li><span class="rainbow">ZERO ADS / POP UP ADS</span></li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+<div class="page" id="page-archive">
+<div class="archive-empty">
+<div class="archive-icon">
+<svg fill="none" height="28" viewbox="0 0 24 24" width="28">
+<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"></circle>
+<line stroke="currentColor" stroke-linecap="round" stroke-width="2" x1="12" x2="12" y1="10" y2="16"></line>
+<circle cx="12" cy="7" fill="currentColor" r="1.5"></circle>
+</svg>
+</div>
+<div class="archive-text">Recordings of past events will be shown here</div>
+</div>
+</div>
+<div class="page" id="page-discord"></div>
+</main>
+<!-- Timers (all cards) -->
+
+<script>
+// ==========================================
+// Cards: countdown + move to Live section
+// (Does NOT touch stream logic)
+// ==========================================
+(function(){
+  const MONTHS = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+
+  // ---- Timezone-safe parsing (treat naive timestamps as Europe/Berlin) ----
+  function _tzOffsetMinutes(timeZone, dateUtcMs){
+    const dtf = new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+      hour12: false
+    });
+    const parts = dtf.formatToParts(new Date(dateUtcMs));
+    const map = {};
+    for (const p of parts) if (p.type !== "literal") map[p.type] = p.value;
+    const asIfUtc = Date.UTC(
+      Number(map.year),
+      Number(map.month) - 1,
+      Number(map.day),
+      Number(map.hour),
+      Number(map.minute),
+      Number(map.second)
+    );
+    return (asIfUtc - dateUtcMs) / 60000;
+  }
+
+  function parseBerlinLocalToDate(s){
+    // s: "YYYY-MM-DDTHH:mm:ss" (no Z / no offset) => interpret as Europe/Berlin wall-clock
+    const m = String(s || "").match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (!m) return null;
+    const y = Number(m[1]), mo = Number(m[2]) - 1, d = Number(m[3]);
+    const h = Number(m[4]), mi = Number(m[5]), se = Number(m[6] || "0");
+
+    // Initial guess: treat wall time as UTC, then correct by Berlin offset (iterate to handle DST boundaries)
+    let utcMs = Date.UTC(y, mo, d, h, mi, se);
+    for (let i = 0; i < 3; i++){
+      const off = _tzOffsetMinutes("Europe/Berlin", utcMs);
+      const next = Date.UTC(y, mo, d, h, mi, se) - off * 60000;
+      if (Math.abs(next - utcMs) < 1000) { utcMs = next; break; }
+      utcMs = next;
+    }
+    const out = new Date(utcMs);
+    return isNaN(out.getTime()) ? null : out;
+  }
+
+  function parseEventStart(s){
+    // If ISO has Z or explicit offset, native Date is fine.
+    // If it's naive (no timezone), interpret as Europe/Berlin to keep consistent for all users.
+    if (!s) return null;
+    const str = String(s).trim();
+    if (/[zZ]$/.test(str) || /[+\-]\d{2}:\d{2}$/.test(str)) {
+      const d = new Date(str);
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+  // expose for other scripts (stream overlay)
+  window.parseEventStart = parseEventStart;
+    return parseBerlinLocalToDate(str);
+  }
+
+  function formatDiff(ms){
+    if (ms <= 0) return "LIVE";
+    const days = Math.floor(ms / (1000*60*60*24));
+    const hours = Math.floor((ms / (1000*60*60)) % 24);
+    const minutes = Math.floor((ms / (1000*60)) % 60);
+    const seconds = Math.floor((ms / 1000) % 60);
+    return `${days}d ${String(hours).padStart(2,"0")}h ${String(minutes).padStart(2,"0")}m ${String(seconds).padStart(2,"0")}s`;
+  }
+
+  // If a card has no data-start, infer it from its .card__date like "Saturday, Mar 4"
+  function inferStartFromCard(card){
+    if (!card || card.dataset.start) return;
+    const dateEl = card.querySelector(".card__date");
+    const label = (dateEl ? dateEl.textContent : "").trim();
+    if (!label || label === "TBA") return;
+
+    const m = label.match(/,\s*([A-Za-z]{3})\s+(\d{1,2})\s*$/);
+    if (!m) return;
+
+    const mon = MONTHS[m[1]];
+    const day = Number(m[2]);
+    if (mon === undefined || !day) return;
+
+    const now = new Date();
+    let year = now.getFullYear();
+    let d = new Date(year, mon, day, 0, 0, 0, 0);
+
+    // if already passed -> next year
+    if (d.getTime() < now.getTime() - 60*1000){
+      year += 1;
+      d = new Date(year, mon, day, 0, 0, 0, 0);
+    }
+
+    // Save as a naive Berlin wall-clock timestamp (no Z).
+// It will be interpreted as Europe/Berlin by parseEventStart() for consistent countdowns worldwide.
+const pad = (n)=>String(n).padStart(2,"0");
+card.dataset.start = `${year}-${pad(mon+1)}-${pad(day)}T00:00:00`;
+}
+
+  function getStart(card){
+    inferStartFromCard(card);
+    const s = card?.dataset?.start;
+    return parseEventStart(s);
+  }
+
+  function setTimerLive(timerEl){
+    if (!timerEl) return;
+    timerEl.innerHTML = '<span class="liveDotSmall"></span>LIVE';
+  }
+
+  function setTimerCountdown(timerEl, txt){
+    if (!timerEl) return;
+    timerEl.textContent = txt;
+  }
+
+  function update(){
+    const liveWrap = document.getElementById("liveCards");
+    const noLiveBox = document.querySelector(".noLiveBox");
+    const now = Date.now();
+
+    let liveCount = 0;
+
+    document.querySelectorAll(".card").forEach(card=>{
+      const start = getStart(card);
+      const timerEl = card.querySelector(".card__timer");
+      if (!start){
+        // no start -> leave as is
+        return;
+      }
+
+      const diff = start.getTime() - now;
+
+      if (diff <= 0){
+        // mark LIVE in footer timer
+        setTimerLive(timerEl);
+
+        // move to Live section (only once)
+        if (liveWrap && card.parentElement !== liveWrap){
+          liveWrap.appendChild(card);
+        }
+        liveCount++;
+      } else {
+        // countdown in footer timer
+        const txt = formatDiff(diff);
+        setTimerCountdown(timerEl, txt);
+      }
+    });
+
+    // toggle "No events" message
+    if (noLiveBox){
+      noLiveBox.style.display = (liveCount > 0) ? "none" : "";
+    }
+    if (liveWrap){
+      liveWrap.style.display = (liveCount > 0) ? "" : "none";
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", ()=>{
+    update();
+    setInterval(update, 1000);
+  });
+})();
+</script>
+<!-- Nav switching (robust for mobile + desktop) -->
+<script>
+  (function () {
+    function setTopbarH() {
+      const topbar = document.querySelector(".topbar");
+      if (!topbar) return;
+      const h = Math.ceil(topbar.getBoundingClientRect().height);
+      document.documentElement.style.setProperty("--topbar-h", h + "px");
+    }
+
+    window.addEventListener("load", setTopbarH);
+    window.addEventListener("resize", setTopbarH);
+    setTopbarH();
+  })();
+</script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const EPS = 2;
+
+    document.querySelectorAll(".cards-wrap").forEach((wrap) => {
+      const track = wrap.querySelector(".cards--1-wide");
+      const leftBtn = wrap.querySelector(".cards-arrow--left");
+      const rightBtn = wrap.querySelector(".cards-arrow--right");
+
+      if (!track || !leftBtn || !rightBtn) return;
+
+      const step = 326;
+
+      function updateArrows() {
+        const maxScrollLeft = track.scrollWidth - track.clientWidth;
+
+        if (maxScrollLeft <= EPS) {
+          leftBtn.classList.add("is-hidden");
+          rightBtn.classList.add("is-hidden");
+        } else {
+          if (track.scrollLeft <= EPS) leftBtn.classList.add("is-hidden");
+          else leftBtn.classList.remove("is-hidden");
+
+          if (track.scrollLeft >= maxScrollLeft - EPS) rightBtn.classList.add("is-hidden");
+          else rightBtn.classList.remove("is-hidden");
+        }
+
+        wrap.classList.toggle("has-left-fade", track.scrollLeft > EPS);
+        wrap.classList.toggle("has-right-fade", track.scrollLeft < maxScrollLeft - EPS);
+      }
+
+      leftBtn.addEventListener("click", () => {
+        track.scrollBy({ left: -step, behavior: "smooth" });
+      });
+
+      rightBtn.addEventListener("click", () => {
+        track.scrollBy({ left: step, behavior: "smooth" });
+      });
+
+      track.addEventListener("scroll", () => requestAnimationFrame(updateArrows));
+      window.addEventListener("resize", () => requestAnimationFrame(updateArrows));
+
+      updateArrows();
+    });
+  });
+</script>
+<script>
+  // ================================
+  // HEADER NAV (Main/Request/VIP/Archive)
+  // ================================
+  document.addEventListener("DOMContentLoaded", () => {
+    const navItems = Array.from(document.querySelectorAll(".topbar__nav .nav__item[data-page]"));
+    const pages = Array.from(document.querySelectorAll(".page"));
+    const brand = document.querySelector(".topbar__brand");
+
+    function showPage(pageName){
+      const targetId = "page-" + pageName;
+      pages.forEach(p => p.classList.toggle("is-active", p.id === targetId));
+      navItems.forEach(a => a.classList.toggle("active", a.dataset.page === pageName));
+
+      // If stream overlay is open, close it (so it doesn't cover the page)
+      if (window.closeOverlay) window.closeOverlay();
+
+      // Scroll to top for nice UX
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    // Click handlers
+    navItems.forEach(a => {
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        const pageName = a.dataset.page;
+        if (!pageName) return;
+        showPage(pageName);
+      });
+    });
+
+    // Brand click -> Main
+    if (brand){
+      brand.addEventListener("click", (e) => {
+        e.preventDefault();
+        showPage("main");
+      });
+    }
+
+    // Optional: open correct page from URL hash: #request, #vip, #archive
+    const hash = (location.hash || "").replace("#","").trim();
+    if (hash && ["main","request","vip","archive"].includes(hash)){
+      showPage(hash);
+    }
+  });
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const wrap = document.querySelector(".topbar__nav-wrap");
+  const nav = document.querySelector(".topbar__nav");
+  if (!wrap || !nav) return;
+
+  const EPS = 2;
+
+  function updateFog(){
+    const maxScrollLeft = nav.scrollWidth - nav.clientWidth;
+
+    // справа fog если есть куда скроллить вправо
+    wrap.classList.toggle("has-right-fade", nav.scrollLeft < maxScrollLeft - EPS);
+
+    // слева fog если мы не в самом начале
+    wrap.classList.toggle("has-left-fade", nav.scrollLeft > EPS);
+  }
+
+  nav.addEventListener("scroll", () => requestAnimationFrame(updateFog));
+  window.addEventListener("resize", () => requestAnimationFrame(updateFog));
+
+  updateFog();
+});
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./auth.js"></script>
+<script src="./chat.js"></script>
+<script src="./paywall.js"></script>
+
+<script>
+  window.FZPaywall.initPaywall({
+    containerSelector: ".stream-player-box"
+  });
+</script>
+
+
+<script>
+/* FZ mobile chat splitter (drag to resize stream/chat) */
+(function(){
+  const root = document.documentElement;
+  const overlay = document.getElementById("streamOverlay");
+  const handle = document.getElementById("chatDragHandle");
+  if (!overlay || !handle) return;
+
+  const KEY = "fz_split_stream_percent"; // number 40..80 (stream height)
+  const DEFAULT_STREAM = 60;
+
+  function isMobile(){
+    return window.matchMedia && window.matchMedia("(max-width: 520px)").matches;
+  }
+
+  function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+
+  function applyPercent(p){
+    const pct = clamp(Number(p) || DEFAULT_STREAM, 40, 80);
+    root.style.setProperty("--fz-stream-h", pct + "%");
+    try{ localStorage.setItem(KEY, String(pct)); }catch(_e){}
+  }
+
+  // load stored
+  try{
+    const saved = localStorage.getItem(KEY);
+    if (saved) applyPercent(saved);
+    else applyPercent(DEFAULT_STREAM);
+  }catch(_e){
+    applyPercent(DEFAULT_STREAM);
+  }
+
+  let dragging = false;
+
+  function getClientY(e){
+    if (e.touches && e.touches[0]) return e.touches[0].clientY;
+    if (e.changedTouches && e.changedTouches[0]) return e.changedTouches[0].clientY;
+    return e.clientY;
+  }
+
+  function onDown(e){
+    if (!isMobile()) return;
+    dragging = true;
+    handle.classList.add("is-dragging");
+    document.body.classList.add("is-splitting");
+    e.preventDefault();
+  }
+
+  function onMove(e){
+    if (!dragging || !isMobile()) return;
+
+    const rect = overlay.getBoundingClientRect();
+    const y = getClientY(e);
+
+    const rel = (y - rect.top);
+    const h = rect.height || 1;
+
+    // stream height percent of overlay
+    const pct = clamp((rel / h) * 100, 40, 80);
+    applyPercent(pct);
+
+    e.preventDefault();
+  }
+
+  function onUp(){
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove("is-dragging");
+    document.body.classList.remove("is-splitting");
+  }
+
+  // Pointer/touch/mouse support
+  handle.addEventListener("pointerdown", onDown, { passive:false });
+  window.addEventListener("pointermove", onMove, { passive:false });
+  window.addEventListener("pointerup", onUp);
+
+  handle.addEventListener("touchstart", onDown, { passive:false });
+  window.addEventListener("touchmove", onMove, { passive:false });
+  window.addEventListener("touchend", onUp);
+
+  // If overlay closes, stop drag
+  document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") onUp(); });
+
+})();
+</script>
+
+<script>
+/* FZ universal fullscreen (iframe + video safe) */
+(function(){
+  function bind(){
+    const btn = document.getElementById('btnVideoFullscreen');
+    const box = document.querySelector('.stream-player-box');
+    if(!btn || !box) return;
+
+    btn.addEventListener('click', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (box.requestFullscreen) {
+        box.requestFullscreen().catch(()=>{});
+      } else if (box.webkitRequestFullscreen) {
+        box.webkitRequestFullscreen();
+      }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bind);
+  } else {
+    bind();
+  }
+})();
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+  const overlay = document.getElementById("streamOverlay");
+  const titleEl = document.getElementById("streamTitle");
+  const metaEl  = document.getElementById("streamMeta");
+  const box     = document.querySelector(".stream-player-box");
+
+  function getCardTitle(card){
+    // 1) если есть data-title
+    if (card?.dataset?.title) return card.dataset.title;
+    // 2) иначе пробуем взять текст из карточки (если есть)
+    const t = card.querySelector(".card__title");
+    return (t ? t.textContent.trim() : "Live stream");
+  }
+
+  function getCardMeta(card){
+    if (card?.dataset?.meta) return card.dataset.meta;
+    const d = card.querySelector(".card__date");
+    return (d ? d.textContent.trim() : "");
+  }
+
+  function getCardIframe(card){
+    // Самый простой путь: положи iframe-ссылку прямо в data-iframe
+    // например: data-iframe="https://embednow.top/embed/...."
+    return card?.dataset?.iframe || "";
+  }
+
+ function setIframe(url){
+  const old = box.querySelector("iframe");
+  if (old) old.remove();
+
+  // Ensure black fallback exists
+  let fallback = box.querySelector(".iframe-fallback");
+  if (!fallback){
+    fallback = document.createElement("div");
+    fallback.className = "iframe-fallback";
+    box.appendChild(fallback);
+  }
+
+  // Always show black first
+  fallback.style.display = "block";
+
+  if (!url) return;
+
+  const startedAt = performance.now();
+
+  const iframe = document.createElement("iframe");
+  iframe.src = url.trim();
+  iframe.setAttribute("allowfullscreen", "true");
+  iframe.setAttribute("allow", "encrypted-media; picture-in-picture;");
+  iframe.setAttribute("frameborder", "0");
+
+  // Make iframe fill box
+  iframe.style.width = "100%";
+  iframe.style.height = "100%";
+  iframe.style.display = "block";
+
+  iframe.onload = () => {
+    const loadMs = performance.now() - startedAt;
+
+    // If it loads "instantly", it's usually the blocked error page.
+    // Keep black screen.
+    if (loadMs < 600) {
+      fallback.style.display = "block";
+      return;
+    }
+
+    // Looks like real content loaded → remove black
+    fallback.style.display = "none";
+  };
+
+  box.appendChild(iframe);
+}
+  function openFromCard(card){
+    if (titleEl) titleEl.textContent = getCardTitle(card);
+    if (metaEl)  metaEl.textContent  = getCardMeta(card);
+
+    const url = getCardIframe(card);
+    setIframe(url);
+
+    overlay.classList.add("active");
+    document.body.style.overflow = "hidden";
+
+    // Paywall: показать/скрыть поверх стрима для конкретного ивента
+   window.FZPaywall?.showForEvent(card.dataset.eventId || "");
+
+  }
+
+  window.closeOverlay = function(){
+    overlay.classList.remove("active");
+    document.body.style.overflow = "";
+
+    // спрятать paywall при закрытии
+    document.querySelector(".fz-paywall")?.classList.remove("is-visible");
+
+    // чистим iframe, чтобы не продолжал играть
+    const old = box.querySelector("iframe");
+    if (old) old.remove();
+  };
+
+  document.querySelectorAll(".card").forEach(card => {
+    if (card.classList.contains("card--coming-soon")) return;
+    card.addEventListener("click", () => openFromCard(card));
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") window.closeOverlay();
+  });
+
+});
+</script>
+
+
+<script>
+document.addEventListener("DOMContentLoaded", function(){
+
+  const btn = document.querySelector(".request-btn");
+  if(!btn) return;
+
+  btn.addEventListener("click", function(){
+
+    if(btn.classList.contains("is-success")) return;
+
+    btn.classList.add("is-success");
+    btn.disabled = true;
+
+    // через 3 секунды вернуть кнопку
+    setTimeout(() => {
+      btn.classList.remove("is-success");
+      btn.disabled = false;
+    }, 3000);
+
+  });
+
+});
+</script>
+</body>
+</html>
