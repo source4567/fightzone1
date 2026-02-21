@@ -170,7 +170,7 @@
 
       const token = await getAccessToken();
       if (!token) {
-        alert("Please login first (token not found). Try logout/login once.");
+        alert("Please make an account to make a purchase.");
         return;
       }
 
@@ -289,4 +289,5 @@
     startCheckout,
   };
 })();
+
 
