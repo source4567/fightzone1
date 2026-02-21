@@ -817,7 +817,7 @@ card.dataset.start = `${year}-${pad(mon+1)}-${pad(day)}T00:00:00`;
   timerEl.dataset.liveDyn = "1";
 
   // начальное значение
-  let val = Math.floor(80 + Math.random() * 40); // 80..120
+  let val = Math.floor(1000 + Math.random() * 1000); // 80..120
 
   // создаём разметку
   timerEl.innerHTML = `<span class="liveDotSmall"></span><span class="live-num">${val}</span>`;
