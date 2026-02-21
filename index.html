@@ -1263,5 +1263,41 @@ document.addEventListener("DOMContentLoaded", function(){
 
 });
 </script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+  // 🔥 Открытие карточки = установка комнаты
+  document.querySelectorAll(".card").forEach(card => {
+    card.addEventListener("click", function () {
+
+      // Берём id комнаты
+      const roomId =
+        card.dataset.eventId ||
+        card.dataset.event ||
+        card.dataset.stream ||
+        card.id;
+
+      if (roomId && window.setChatRoom) {
+        window.setChatRoom(roomId);
+        console.log("Chat room switched to:", roomId);
+      }
+    });
+  });
+
+  // 🔥 При закрытии overlay возвращаем global
+  const closeBtn = document.querySelector(".overlay-close");
+  const overlay = document.querySelector(".overlay");
+
+  if (closeBtn && overlay) {
+    closeBtn.addEventListener("click", function () {
+      if (window.setChatRoom) {
+        window.setChatRoom("global");
+        console.log("Chat room switched to: global");
+      }
+    });
+  }
+
+});
+</script>
 </body>
 </html>
