@@ -206,6 +206,13 @@
 </div>
 </div>
 
+<div class="promo-bar" aria-label="Promotion">
+  <div class="promo-bar__track">
+    <span class="promo-bar__text">10$ LIFETIME ACCESS TO ALL BOXING / UFC STREAMS — OFFER ON THE WEBSITE ENDS SOON — SEE VIP TAB</span>
+    <span class="promo-bar__text" aria-hidden="true">10$ LIFETIME ACCESS TO ALL BOXING / UFC STREAMS — OFFER ON THE WEBSITE ENDS SOON — SEE VIP TAB</span>
+  </div>
+</div>
+
 <header class="topbar">
 <div class="container topbar__inner">
 <div class="topbar__left">
@@ -417,7 +424,7 @@
 <div class="cards-wrap">
 <button aria-label="Scroll left" class="cards-arrow cards-arrow--left">‹</button>
 <div class="cards cards--1-wide">
-<div class="card" data-event-id="hernandez" data-min="1000" data-jump="1" data-max="4000" data-stream="strickland" data-event="strickland" data-meta="Sunday, Feb 22 · UFC" data-mode="strict" data-start="2026-02-21T23:00:00" data-title="UFC: Strickland vs Hernandez" data-iframe="https://embedsporty.top/embed/delta/live-event_ufc-fight-night-strickland-vs-hernandez-live-stream/1">
+<div class="card" data-event-id="hernandez" data-stream="strickland" data-event="strickland" data-meta="Sunday, Feb 22 · UFC" data-mode="strict" data-start="2026-02-22T00:00:00" data-title="UFC: Strickland vs Hernandez" data-iframe="https://embedsporty.top/embed/delta/live_premier-league_aston-villa-leeds-live-streaming-44218224/1">
 <div class="card__media card__media--image" style="background-image:url('strickland-vs-hernandez-alt-1024x576.jpg')"></div>
 <div class="card__footer">
 <div class="card__title">UFC: Strickland vs Hernandez</div>
@@ -430,7 +437,7 @@
 </div>
 </div>
 </div>
-<div class="card" data-event-id="kavanagh"  data-min="50" data-max="150"data-stream="moreno" data-event="moreno" data-meta="Sunday, Mar 1 · UFC" data-mode="strict" data-start="2026-03-01T00:00:00" data-title="UFC: Moreno vs. Kavanagh"  data-iframe="https://modistreams.org/embed/olympics/2026-02-14/hockey/sweden-vs-slovakia-mens-group-b-1771067400">
+<div class="card" data-event-id="kavanagh"  data-stream="moreno" data-event="moreno" data-meta="Sunday, Mar 1 · UFC" data-mode="strict" data-start="2026-03-01T00:00:00" data-title="UFC: Moreno vs. Kavanagh"  data-iframe="https://modistreams.org/embed/olympics/2026-02-14/hockey/sweden-vs-slovakia-mens-group-b-1771067400">
 <div class="card__media card__media--image" style="background-image:url('dsfsdfsdfsf.jpg')"></div>
 <div class="card__footer">
 <div class="card__title">UFC: Moreno vs. Kavanagh</div>
@@ -521,7 +528,7 @@
 </div>
 </div>
 </div>
-<div class="card" data-event-id="ryan" data-stream="mario" data-start="2026-02-21T22:00:00" data-meta="Saturday, Feb 21 · Boxing" data-title="Mario Barrios vs. Ryan Garcia" data-iframe="https://cstream.fit/embed/e73242b54dd2360f76e52a75a00c3cb5">
+<div class="card" data-event-id="ryan" data-stream="mario" data-start="2026-02-21T22:00:00" data-meta="Saturday, Feb 21 · Boxing" data-title="Mario Barrios vs. Ryan Garcia">
 <div class="card__media card__media--image" style="background-image:url('barrios-vs-garcia-1024x576.jpg')"></div>
 <div class="card__footer">
 <div class="card__title">Mario Barrios vs. Ryan Garcia</div>
@@ -810,48 +817,9 @@ card.dataset.start = `${year}-${pad(mon+1)}-${pad(day)}T00:00:00`;
   }
 
   function setTimerLive(timerEl){
-  if (!timerEl) return;
-
-  // если уже запущено — не перезапускать
-  if (timerEl.dataset.liveDyn === "1") return;
-  timerEl.dataset.liveDyn = "1";
-
-  // получаем карточку
-  const card = timerEl.closest(".card");
-
-  // берём диапазон из HTML (если есть)
-  const min = parseInt(card?.dataset.min) || 80;
-  const max = parseInt(card?.dataset.max) || 120;
-
-  // ✅ прыжок можно задать ТОЛЬКО для одной карточки через data-jump
-  // если data-jump нет — будет дефолт 4
-  const jump = parseInt(card?.dataset.jump) || 4;
-
-  // стартовое значение
-  let val = Math.floor(min + Math.random() * (max - min));
-
-  // создаём разметку
-  timerEl.innerHTML =
-    `<span class="liveDotSmall"></span><span class="live-num">${val}</span>`;
-
-  // обновляем значение
-  const intervalId = setInterval(() => {
-
-    if (!document.body.contains(timerEl)) {
-      clearInterval(intervalId);
-      return;
-    }
-
-    const delta = Math.floor(Math.random() * (jump * 2 + 1)) - jump;
-    val = Math.max(min, Math.min(max, val + delta));
-
-    const numEl = timerEl.querySelector(".live-num");
-    if (numEl) numEl.textContent = val.toLocaleString();
-
-  }, 2500);
-
-  timerEl._liveIntervalId = intervalId;
-}
+    if (!timerEl) return;
+    timerEl.innerHTML = '<span class="liveDotSmall"></span>LIVE';
+  }
 
   function setTimerCountdown(timerEl, txt){
     if (!timerEl) return;
