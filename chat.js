@@ -295,8 +295,17 @@ async function switchRoom(roomId){
   if (!CHAT_SB) return;
 
   // reload messages + resubscribe realtime
+  // reload messages
   await loadRecent(CHAT_SB);
-  await startRealtime(CHAT_SB);
+
+ if (!IS_MOBILE) {
+   await startRealtime(CHAT_SB);
+ } else {
+   if (mobileInterval) clearInterval(mobileInterval);
+   mobileInterval = setInterval(() => {
+     loadRecent(CHAT_SB);
+   }, 5000);
+  }
 }
 
 // expose globally
