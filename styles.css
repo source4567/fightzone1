@@ -871,7 +871,7 @@ gap:18px;
 }
 
 .stream-overlay.active{
-  height: calc(100vh - var(--topbar-h, 64px));
+  height: calc(100dvh - var(--topbar-h, 64px));
 }
 
 @supports (height: 100dvh){
