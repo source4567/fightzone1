@@ -1193,10 +1193,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const metaEl  = document.getElementById("streamMeta");
   const box     = document.querySelector(".stream-player-box");
 
+  if (!overlay || !box) return;
+
   function getCardTitle(card){
-    // 1) если есть data-title
     if (card?.dataset?.title) return card.dataset.title;
-    // 2) иначе пробуем взять текст из карточки (если есть)
     const t = card.querySelector(".card__title");
     return (t ? t.textContent.trim() : "Live stream");
   }
@@ -1208,95 +1208,99 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function getCardIframe(card){
-    // Самый простой путь: положи iframe-ссылку прямо в data-iframe
-    // например: data-iframe="https://embednow.top/embed/...."
-    return card?.dataset?.iframe || "";
+    return (card?.dataset?.iframe || "").trim();
   }
 
- function setIframe(url){
-  const old = box.querySelector("iframe");
-  if (old) old.remove();
+  function setIframe(url){
+    const old = box.querySelector("iframe");
+    if (old) old.remove();
 
-  // Ensure black fallback exists
-  let fallback = box.querySelector(".iframe-fallback");
-  if (!fallback){
-    fallback = document.createElement("div");
-    fallback.className = "iframe-fallback";
-    box.appendChild(fallback);
-  }
-
-  // Always show black first
-  fallback.style.display = "block";
-
-  if (!url) return;
-
-  const startedAt = performance.now();
-
-  const iframe = document.createElement("iframe");
-  iframe.src = url.trim();
-  iframe.setAttribute("allowfullscreen", "true");
-  iframe.setAttribute("allow", "encrypted-media; picture-in-picture;");
-  iframe.setAttribute("frameborder", "0");
-
-  // Make iframe fill box
-  iframe.style.width = "100%";
-  iframe.style.height = "100%";
-  iframe.style.display = "block";
-
-  iframe.onload = () => {
-    const loadMs = performance.now() - startedAt;
-
-    // If it loads "instantly", it's usually the blocked error page.
-    // Keep black screen.
-    if (loadMs < 600) {
-      fallback.style.display = "block";
-      return;
+    // Ensure black fallback exists
+    let fallback = box.querySelector(".iframe-fallback");
+    if (!fallback){
+      fallback = document.createElement("div");
+      fallback.className = "iframe-fallback";
+      box.appendChild(fallback);
     }
 
-    // Looks like real content loaded → remove black
-    fallback.style.display = "none";
-  };
+    // Always show black first
+    fallback.style.display = "block";
 
-  box.appendChild(iframe);
-}
+    if (!url) return;
+
+    const IS_MOBILE = window.matchMedia && window.matchMedia("(max-width: 520px)").matches;
+    const startedAt = performance.now();
+
+    const iframe = document.createElement("iframe");
+    iframe.src = url;
+
+    iframe.setAttribute("allowfullscreen", "true");
+    iframe.setAttribute("allow", "autoplay; fullscreen; encrypted-media; picture-in-picture");
+    iframe.setAttribute("frameborder", "0");
+    iframe.loading = "eager";
+
+    iframe.style.width = "100%";
+    iframe.style.height = "100%";
+    iframe.style.display = "block";
+
+    iframe.onload = () => {
+      const loadMs = performance.now() - startedAt;
+
+      // Mobile: hide black as soon as iframe loads
+      if (IS_MOBILE) {
+        fallback.style.display = "none";
+        return;
+      }
+
+      // Desktop: keep your fast-load protection
+      if (loadMs < 600) {
+        fallback.style.display = "block";
+        return;
+      }
+
+      fallback.style.display = "none";
+    };
+
+    box.appendChild(iframe);
+  }
+
   function openFromCard(card){
     const roomId =
-     card.dataset.eventId ||
-     card.dataset.event ||
-     card.dataset.stream ||
-     card.id;
+      card.dataset.eventId ||
+      card.dataset.event ||
+      card.dataset.stream ||
+      card.id;
 
     if (roomId && window.setChatRoom) {
-     window.setChatRoom(roomId);
+      window.setChatRoom(roomId);
     }
+
     if (titleEl) titleEl.textContent = getCardTitle(card);
     if (metaEl)  metaEl.textContent  = getCardMeta(card);
 
-    const url = getCardIframe(card);
-    setIframe(url);
+    setIframe(getCardIframe(card));
 
     overlay.classList.add("active");
     document.body.style.overflow = "hidden";
 
-    // Paywall: показать/скрыть поверх стрима для конкретного ивента
-   window.FZPaywall?.showForEvent(card.dataset.eventId || "");
-   window.dispatchEvent(new Event("fz:overlay-open"));
+    window.FZPaywall?.showForEvent(card.dataset.eventId || "");
+    window.dispatchEvent(new Event("fz:overlay-open"));
   }
 
   window.closeOverlay = function(){
     overlay.classList.remove("active");
     document.body.style.overflow = "";
 
-    // спрятать paywall при закрытии
     document.querySelector(".fz-paywall")?.classList.remove("is-visible");
 
-    // чистим iframe, чтобы не продолжал играть
     const old = box.querySelector("iframe");
     if (old) old.remove();
+
     window.dispatchEvent(new Event("fz:overlay-close"));
+
     if (window.setChatRoom) {
-     window.setChatRoom("global");
-    }   
+      window.setChatRoom("global");
+    }
   };
 
   document.querySelectorAll(".card").forEach(card => {
