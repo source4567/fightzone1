@@ -1235,6 +1235,7 @@ document.addEventListener("DOMContentLoaded", () => {
     iframe.src = url;
 
     iframe.setAttribute("allowfullscreen", "true");
+    iframe.setAttribute("webkitallowfullscreen", "true");
     iframe.setAttribute("allow", "autoplay; fullscreen; encrypted-media; picture-in-picture");
     iframe.setAttribute("frameborder", "0");
     iframe.loading = "eager";
