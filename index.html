@@ -1232,19 +1232,11 @@ document.addEventListener("DOMContentLoaded", () => {
   iframe.style.height = "100%";
   iframe.style.display = "block";
 
-  iframe.onload = () => {
-    const loadMs = performance.now() - startedAt;
-
-    // If it loads "instantly", it's usually the blocked error page.
-    // Keep black screen.
-    if (loadMs < 600) {
-      fallback.style.display = "block";
-      return;
-    }
-
-    // Looks like real content loaded → remove black
+ iframe.onload = () => {
+  setTimeout(() => {
     fallback.style.display = "none";
-  };
+  }, 200);
+};
 
   box.appendChild(iframe);
 }
