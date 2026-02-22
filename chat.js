@@ -50,10 +50,12 @@ const chatBody = document.getElementById("chatBody");
 const chatForm = document.getElementById("chatForm");
 const chatMessage = document.getElementById("chatMessage");
 const chatHint = document.getElementById("chatHint");
+const IS_MOBILE = window.matchMedia("(max-width: 768px)").matches;
 
 // ===== Rooms (per-stream chat) =====
 let ACTIVE_ROOM = "global";
 let realtimeChannel = null;
+let mobileInterval = null;
 const SEEN_MESSAGE_IDS = new Set();
 
 // keep last room (optional)
@@ -325,7 +327,19 @@ window.setChatRoom = function(roomId){
   }
 
   await loadRecent(sb);
-  await startRealtime(sb);
+
+  if (!IS_MOBILE) {
+    await startRealtime(sb);
+  } else {
+   // на мобиле обновляем историю раз в 5 секунд
+   if (mobileInterval) {
+    clearInterval(mobileInterval);
+  }
+
+  mobileInterval = setInterval(() => {
+    loadRecent(sb);
+  }, 5000);
+}
 
   if (chatForm) {
     chatForm.addEventListener("submit", async (e) => {
