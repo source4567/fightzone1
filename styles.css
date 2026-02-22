@@ -1858,9 +1858,3 @@ body.is-modal-open{
     animation-duration: 28s;
   }
 }
-@supports (height: 100dvh){
-  .stream-overlay,
-  .stream-overlay.active{
-    height: calc(100dvh - var(--topbar-h, 64px)) !important;
-  }
-}
