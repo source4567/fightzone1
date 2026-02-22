@@ -1,34 +1,75 @@
 /* chat.js — Fightzone realtime chat (Supabase)
    - Reads last messages
-   - Tries realtime (postgres_changes + broadcast)
-   - Fallback: polling (fetch new messages every 2s) so ALL users see without refresh
+   - Subscribes to new messages via Realtime (postgres_changes)
+   - Allows sending only for authenticated users
 */
 
+/* 1) CONFIG
+   Use the SAME project URL + anon key as in auth.js.
+   If your auth.js already creates window.sb, chat will reuse it.
+*/
 const CHAT_SUPABASE_URL = "https://ghvcxourgfbjdtzxqkox.supabase.co";
-const CHAT_SUPABASE_ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdodmN4b3VyZ2ZiamR0enhxa294Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA1NTIxMDMsImV4cCI6MjA4NjEyODEwM30.V1xKeI68xXRAEjfhMobNQH_1KQOzh1vLojSw6LnmsAc";
+const CHAT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdodmN4b3VyZ2ZiamR0enhxa294Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA1NTIxMDMsImV4cCI6MjA4NjEyODEwM30.V1xKeI68xXRAEjfhMobNQH_1KQOzh1vLojSw6LnmsAc";
 
+// Table name
 const CHAT_TABLE = "chat_messages";
 
+// Nickname color palette (stable per account via user_id hash)
 const NAME_COLORS = [
-  "#FF0000", "#005BFF", "#00FF00", "#FFD700", "#FF00FF",
-  "#7A00FF", "#FF7A00", "#00FFFF", "#B6FF00", "#001AFF"
+  "#FF0000", // Red
+  "#005BFF", // Electric blue
+  "#00FF00", // Neon green
+  "#FFD700", // Bright yellow
+  "#FF00FF", // Fuchsia
+  "#7A00FF", // Purple
+  "#FF7A00", // Orange
+  "#00FFFF", // Cyan / aqua
+  "#B6FF00", // Lime
+  "#001AFF"  // Royal blue
 ];
 
-function hashStringToInt(str) {
+function hashStringToInt(str){
   let h = 0;
   const s = String(str || "");
-  for (let i = 0; i < s.length; i++) {
+  for (let i = 0; i < s.length; i++){
     h = ((h << 5) - h) + s.charCodeAt(i);
-    h |= 0;
+    h |= 0; // 32-bit
   }
   return Math.abs(h);
 }
-function getNameColor(msg) {
+
+function getNameColor(msg){
+  // Prefer user_id (stable), fallback to username
   const key = msg?.user_id || msg?.username || "";
-  return NAME_COLORS[hashStringToInt(key) % NAME_COLORS.length];
+  const idx = hashStringToInt(key) % NAME_COLORS.length;
+  return NAME_COLORS[idx];
 }
-function esc(s) {
+
+// UI
+const chatBody = document.getElementById("chatBody");
+const chatForm = document.getElementById("chatForm");
+const chatMessage = document.getElementById("chatMessage");
+const chatHint = document.getElementById("chatHint");
+
+// ===== Rooms (per-stream chat) =====
+let ACTIVE_ROOM = "global";
+let realtimeChannel = null;
+const SEEN_MESSAGE_IDS = new Set();
+
+// keep last room (optional)
+const ROOM_KEY = "fz_chat_room";
+
+// Chat client holder
+let CHAT_SB = null;
+// If setChatRoom called before init finishes
+let PENDING_ROOM = null;
+
+function normalizeRoom(roomId){
+  const r = String(roomId || "").trim();
+  return r ? r : "global";
+}
+
+function esc(s){
   return String(s)
     .replaceAll("&","&amp;")
     .replaceAll("<","&lt;")
@@ -36,35 +77,18 @@ function esc(s) {
     .replaceAll('"',"&quot;")
     .replaceAll("'","&#39;");
 }
-function isNearBottom(el) {
+
+function isNearBottom(el){
   return (el.scrollHeight - el.scrollTop - el.clientHeight) < 120;
 }
-function scrollToBottom(el) {
+
+function scrollToBottom(el){
   el.scrollTop = el.scrollHeight;
 }
 
-const chatBody = document.getElementById("chatBody");
-const chatForm = document.getElementById("chatForm");
-const chatMessage = document.getElementById("chatMessage");
-const chatHint = document.getElementById("chatHint");
-
-let ACTIVE_ROOM = "global";
-let realtimeChannel = null;
-
-let CURRENT_USER_ID = null;
-let LAST_SENT = null; // { room, content, atMs }
-
-// polling state
-let POLL_TIMER = null;
-let LAST_SEEN_CREATED_AT = null; // ISO string for ACTIVE_ROOM
-
-function normalizeRoom(roomId) {
-  const r = String(roomId || "").trim();
-  return r ? r : "global";
-}
-
-function getDisplayName(user) {
+function getDisplayName(user){
   const md = user?.user_metadata || {};
+  // Common fields (based on your Discord OAuth logic)
   const custom = md?.custom_claims || md?.customClaims || md?.custom_claim || null;
   const globalName = custom?.global_name || md?.global_name || null;
 
@@ -79,18 +103,24 @@ function getDisplayName(user) {
   return String(name).slice(0, 24);
 }
 
-async function getClient() {
+async function getClient(){
+  // Reuse existing client if your auth.js exposes one
   if (window.sb && window.sb.auth) return window.sb;
+
+  // Fallback: create our own
   if (!window.supabase || typeof window.supabase.createClient !== "function") {
     console.error("[Chat] Supabase JS not loaded.");
     return null;
   }
+  if (!CHAT_SUPABASE_URL.startsWith("http")) {
+    console.warn("[Chat] Set CHAT_SUPABASE_URL / CHAT_SUPABASE_ANON_KEY in chat.js");
+  }
   return window.supabase.createClient(CHAT_SUPABASE_URL, CHAT_SUPABASE_ANON_KEY);
 }
 
-function renderMessageRow(msg) {
+function renderMessageRow(msg){
   const time = msg.created_at ? new Date(msg.created_at) : null;
-  const hhmm = time ? time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+  const hhmm = time ? time.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}) : "";
   const name = msg.username || "User";
   const text = msg.content || "";
 
@@ -106,7 +136,7 @@ function renderMessageRow(msg) {
   return row;
 }
 
-function setChatEnabled(enabled) {
+function setChatEnabled(enabled){
   if (!chatMessage || !chatForm) return;
   chatMessage.disabled = !enabled;
   chatMessage.placeholder = enabled ? "Type a message…" : "Login to chat…";
@@ -115,40 +145,7 @@ function setChatEnabled(enabled) {
   if (btn) btn.disabled = !enabled;
 }
 
-function clearSysIfNeeded() {
-  if (!chatBody) return;
-  if (chatBody.firstElementChild && chatBody.firstElementChild.classList.contains("chat-sys")) {
-    chatBody.innerHTML = "";
-  }
-}
-function showEmptyState() {
-  if (!chatBody) return;
-  chatBody.innerHTML = '<div class="chat-sys">No messages yet.</div>';
-}
-
-function appendMessageToUI(msg) {
-  if (!chatBody) return;
-  if (msg?.room && msg.room !== ACTIVE_ROOM) return;
-
-  clearSysIfNeeded();
-
-  const shouldStick = isNearBottom(chatBody);
-  chatBody.appendChild(renderMessageRow(msg));
-
-  while (chatBody.children.length > 60) {
-    chatBody.removeChild(chatBody.firstElementChild);
-  }
-
-  if (shouldStick) scrollToBottom(chatBody);
-}
-
-function updateLastSeenFromArray(arr) {
-  if (!arr || arr.length === 0) return;
-  const last = arr[arr.length - 1];
-  if (last?.created_at) LAST_SEEN_CREATED_AT = last.created_at;
-}
-
-async function loadRecent(sb) {
+async function loadRecent(sb){
   if (!sb || !chatBody) return;
 
   const { data, error } = await sb
@@ -164,141 +161,98 @@ async function loadRecent(sb) {
     return;
   }
 
+  // Нет сообщений — это НЕ ошибка
   if (!data || data.length === 0) {
-    LAST_SEEN_CREATED_AT = null;
-    showEmptyState();
+    chatBody.innerHTML = '<div class="chat-sys">No messages yet.</div>';
     return;
+  }
+
+  // ✅ очищаем и заново наполняем список "уже показанных" id
+  if (typeof SEEN_MESSAGE_IDS !== "undefined" && SEEN_MESSAGE_IDS?.clear) {
+    SEEN_MESSAGE_IDS.clear();
   }
 
   chatBody.innerHTML = "";
-  for (const msg of data) chatBody.appendChild(renderMessageRow(msg));
+  for (const msg of data) {
+    if (!msg?.id) continue;
+    if (typeof SEEN_MESSAGE_IDS !== "undefined" && SEEN_MESSAGE_IDS?.add) {
+      SEEN_MESSAGE_IDS.add(msg.id);
+    }
+    chatBody.appendChild(renderMessageRow(msg));
+  }
+
   scrollToBottom(chatBody);
-
-  updateLastSeenFromArray(data);
 }
 
-async function loadNewSince(sb) {
-  if (!sb || !chatBody) return;
-
-  // If we don't know last seen yet — just do full load once
-  if (!LAST_SEEN_CREATED_AT) {
-    await loadRecent(sb);
-    return;
-  }
-
-  const { data, error } = await sb
-    .from(CHAT_TABLE)
-    .select("id, created_at, user_id, username, content, room")
-    .eq("room", ACTIVE_ROOM)
-    .gt("created_at", LAST_SEEN_CREATED_AT)
-    .order("created_at", { ascending: true })
-    .limit(50);
-
-  if (error) {
-    console.warn("[Chat] poll loadNewSince error:", error?.message || error);
-    return;
-  }
-
-  if (!data || data.length === 0) return;
-
-  for (const msg of data) appendMessageToUI(msg);
-  updateLastSeenFromArray(data);
-}
-
-function startPolling(sb) {
-  stopPolling();
-  // каждые 2 секунды подтягиваем новые сообщения
-  POLL_TIMER = setInterval(() => {
-    loadNewSince(sb);
-  }, 2000);
-}
-
-function stopPolling() {
-  if (POLL_TIMER) {
-    clearInterval(POLL_TIMER);
-    POLL_TIMER = null;
-  }
-}
-
-async function startRealtime(sb) {
+async function startRealtime(sb){
   if (!sb) return;
 
+  // remove previous subscription (if any)
   if (realtimeChannel) {
-    try { await sb.removeChannel(realtimeChannel); } catch (_e) {}
+    try { await sb.removeChannel(realtimeChannel); } catch(_e) {}
     realtimeChannel = null;
   }
 
-  const roomAtSubscribe = ACTIVE_ROOM;
-  realtimeChannel = sb.channel("fightzone-chat-" + roomAtSubscribe);
+  // Subscribe only to this room
+  realtimeChannel = sb.channel("fightzone-chat-" + ACTIVE_ROOM);
 
-  // postgres_changes
   realtimeChannel.on(
-    "postgres_changes",
-    {
-      event: "INSERT",
-      schema: "public",
-      table: CHAT_TABLE,
-      filter: `room=eq.${roomAtSubscribe}`
-    },
-    (payload) => {
-      if (!payload?.new) return;
-      if (roomAtSubscribe !== ACTIVE_ROOM) return;
+  "postgres_changes",
+  {
+    event: "INSERT",
+    schema: "public",
+    table: CHAT_TABLE,
+    filter: `room=eq.${ACTIVE_ROOM}`
+  },
+  (payload) => {
+    if (!payload?.new || !chatBody) return;
 
-      const n = payload.new;
+    const msg = payload.new;
 
-      // dedupe for sender
-      if (
-        LAST_SENT &&
-        CURRENT_USER_ID &&
-        n.user_id === CURRENT_USER_ID &&
-        n.room === LAST_SENT.room &&
-        n.content === LAST_SENT.content &&
-        (Date.now() - LAST_SENT.atMs) < 15000
-      ) return;
+    // ✅ защита от дублей (одно и то же сообщение не рисуем два раза)
+    if (!msg?.id) return;
+    if (SEEN_MESSAGE_IDS.has(msg.id)) return;
+    SEEN_MESSAGE_IDS.add(msg.id);
 
-      appendMessageToUI(n);
-      if (n?.created_at) LAST_SEEN_CREATED_AT = n.created_at;
+    // If currently showing "No messages yet." -> clear it
+    if (chatBody.firstElementChild && chatBody.firstElementChild.classList.contains("chat-sys")) {
+      chatBody.innerHTML = "";
     }
-  );
 
-  // broadcast
-  realtimeChannel.on(
-    "broadcast",
-    { event: "new_msg" },
-    ({ payload }) => {
-      if (!payload) return;
-      if (roomAtSubscribe !== ACTIVE_ROOM) return;
+    const shouldStick = isNearBottom(chatBody);
+    chatBody.appendChild(renderMessageRow(msg));
 
-      if (
-        LAST_SENT &&
-        CURRENT_USER_ID &&
-        payload.user_id === CURRENT_USER_ID &&
-        payload.room === LAST_SENT.room &&
-        payload.content === LAST_SENT.content &&
-        (Date.now() - LAST_SENT.atMs) < 15000
-      ) return;
+    // максимум 60 сообщений
+    while (chatBody.children.length > 60) {
+     const first = chatBody.firstElementChild;
+     if (!first) break;
 
-      appendMessageToUI(payload);
-      if (payload?.created_at) LAST_SEEN_CREATED_AT = payload.created_at;
+     const removedId = first.dataset?.id;
+     if (removedId) SEEN_MESSAGE_IDS.delete(removedId);
+
+     chatBody.removeChild(first);
     }
-  );
+
+    if (shouldStick) scrollToBottom(chatBody);
+  }
+);
 
   const { error } = await realtimeChannel.subscribe();
   if (error) console.error("[Chat] subscribe error:", error);
 }
 
-async function setupAuth(sb) {
+async function setupAuth(sb){
+  // Determine initial state
   const { data } = await sb.auth.getSession();
-  CURRENT_USER_ID = data?.session?.user?.id || null;
   setChatEnabled(!!data?.session);
 
+  // Listen to changes
   sb.auth.onAuthStateChange((_event, session) => {
-    CURRENT_USER_ID = session?.user?.id || null;
     setChatEnabled(!!session);
   });
 }
 
-async function sendMessage(sb) {
+async function sendMessage(sb){
   const { data } = await sb.auth.getUser();
   const user = data?.user;
   if (!user) {
@@ -309,23 +263,13 @@ async function sendMessage(sb) {
   const text = (chatMessage?.value || "").trim();
   if (!text) return;
 
+  // Simple anti-spam / size
   const content = text.slice(0, 300);
   const username = getDisplayName(user);
 
-  const row = {
-    created_at: new Date().toISOString(),
-    user_id: user.id,
-    username,
-    content,
-    room: ACTIVE_ROOM
-  };
-
-  const { error } = await sb.from(CHAT_TABLE).insert([{
-    content,
-    username,
-    user_id: user.id,
-    room: ACTIVE_ROOM
-  }]);
+  const { error } = await sb
+    .from(CHAT_TABLE)
+    .insert([{ content, username, user_id: user.id, room: ACTIVE_ROOM }]);
 
   if (error) {
     console.error("[Chat] insert error:", error);
@@ -333,54 +277,55 @@ async function sendMessage(sb) {
     return;
   }
 
-  // show immediately for sender
-  LAST_SENT = { room: ACTIVE_ROOM, content, atMs: Date.now() };
-  appendMessageToUI(row);
-  LAST_SEEN_CREATED_AT = row.created_at;
-
-  // broadcast to others (if WS works)
-  try {
-    if (realtimeChannel) {
-      await realtimeChannel.send({
-        type: "broadcast",
-        event: "new_msg",
-        payload: row
-      });
-    }
-  } catch (e) {
-    // not fatal; polling will still bring it to others
-    console.warn("[Chat] broadcast send failed:", e?.message || e);
-  }
-
   chatMessage.value = "";
 }
 
-// public API for stream overlay
-window.setChatRoom = async function(roomId) {
+// ====== PUBLIC API: change room (called from index.html) ======
+async function switchRoom(roomId){
   const next = normalizeRoom(roomId);
-  if (next === ACTIVE_ROOM) return;
+
+  // avoid useless reload
+  if (next === ACTIVE_ROOM && CHAT_SB) return;
 
   ACTIVE_ROOM = next;
-  LAST_SEEN_CREATED_AT = null;
+  try { localStorage.setItem(ROOM_KEY, ACTIVE_ROOM); } catch(_e) {}
 
-  const sb = await getClient();
-  if (!sb) return;
+  if (!CHAT_SB) return;
 
-  await loadRecent(sb);
-  await startRealtime(sb);
-  startPolling(sb);
+  // reload messages + resubscribe realtime
+  await loadRecent(CHAT_SB);
+  await startRealtime(CHAT_SB);
+}
+
+// expose globally
+window.setChatRoom = function(roomId){
+  PENDING_ROOM = roomId;
+  // if already initialized — switch now
+  if (CHAT_SB) return switchRoom(roomId);
 };
 
 (async function initChat(){
+  // restore last room (optional)
+  try {
+    const saved = localStorage.getItem(ROOM_KEY);
+    if (saved) ACTIVE_ROOM = normalizeRoom(saved);
+  } catch(_e) {}
+
   const sb = await getClient();
   if (!sb) return;
 
+  CHAT_SB = sb;
+
   await setupAuth(sb);
+
+  // if a room was requested before init finished — use it
+  if (PENDING_ROOM) {
+    ACTIVE_ROOM = normalizeRoom(PENDING_ROOM);
+    try { localStorage.setItem(ROOM_KEY, ACTIVE_ROOM); } catch(_e) {}
+  }
+
   await loadRecent(sb);
   await startRealtime(sb);
-
-  // ✅ ALWAYS enable polling fallback (so other users see without refresh)
-  startPolling(sb);
 
   if (chatForm) {
     chatForm.addEventListener("submit", async (e) => {
