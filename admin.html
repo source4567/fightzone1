@@ -1,0 +1,29 @@
+<script type="module">
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const supabase = createClient("YOUR_URL", "YOUR_ANON_KEY");
+
+const { data: { user } } = await supabase.auth.getUser();
+
+if (!user) {
+  window.location.href = "/login.html";
+}
+
+const { data: profile } = await supabase
+  .from("profiles")
+  .select("role")
+  .eq("id", user.id)
+  .single();
+
+if (!profile || profile.role !== "admin") {
+  document.body.innerHTML = "Access denied";
+  throw new Error("Not admin");
+}
+// перерисовать LIVE таймеры, чтобы появились кнопки и повесились клики
+document.querySelectorAll(".card__timer").forEach(el => {
+  if (el.textContent.trim() === "LIVE" || el.querySelector(".live-num")) {
+    el.dataset.liveDyn = "";               // сброс защиты "один раз"
+    window.setTimerLiveWithFake?.(el);     // заново рисуем с кнопками
+  }
+});
+</script>
