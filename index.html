@@ -1030,6 +1030,33 @@ function getSbClient(){
          (window.supabase?.from ? window.supabase : null);
 }
 
+function getSbClient(){
+  return window.sb ||
+         window.supabaseClient ||
+         (window.supabase?.from ? window.supabase : null);
+}
+
+// Детерминированный "рандом" (у всех одинаковый)
+function hash32(str){
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++){
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function jitterFor(eventId, jump, bucket){
+  // bucket меняется раз в 2.5 сек → число "прыгает"
+  let x = hash32(eventId + ":" + bucket);
+  x ^= x << 13; x >>>= 0;
+  x ^= x >>> 17; x >>>= 0;
+  x ^= x << 5;  x >>>= 0;
+
+  const span = jump * 2 + 1;          // [-jump..jump]
+  return (x % span) - jump;
+}
+
 function setTimerLiveWithFake(timerEl){
   if (!timerEl) return;
   if (timerEl.dataset.liveDyn === "1") return;
@@ -1037,6 +1064,11 @@ function setTimerLiveWithFake(timerEl){
 
   const card = timerEl.closest(".card");
   const eventId = card?.dataset?.eventId || "global";
+
+  // настройки "прыжков"
+  const JUMP = 6;          // насколько прыгает вверх/вниз
+  const TICK_MS = 2500;    // как часто прыгает
+  const STEP = 1;          // на сколько ты увеличиваешь базу кнопками (сделай меньше/больше)
 
   timerEl.innerHTML = `
     <span class="liveDotSmall"></span>
@@ -1052,28 +1084,35 @@ function setTimerLiveWithFake(timerEl){
   const sb = getSbClient();
   if (!sb) return;
 
-  let current = 0;
+  // BASE — это число из Supabase, которое ты контролируешь
+  let base = 0;
 
   function render(){
-    numEl.textContent = current.toLocaleString();
+    const bucket = Math.floor(Date.now() / TICK_MS);
+    const d = jitterFor(eventId, JUMP, bucket);
+    const shown = Math.max(0, base + d);
+    numEl.textContent = shown.toLocaleString();
   }
 
-  async function load(){
+  async function loadBase(){
     const { data } = await sb
       .from("viewer_count")
       .select("value")
       .eq("event_id", eventId)
       .single();
 
-    if (data) {
-      current = data.value;
+    if (data && typeof data.value === "number") {
+      base = data.value;
+      render();
+    } else {
+      base = 0;
       render();
     }
   }
 
-  load();
+  loadBase();
 
-  // realtime update
+  // Realtime: если админ поменял базу — все сразу увидят
   sb.channel("vc-" + eventId)
     .on("postgres_changes", {
       event: "UPDATE",
@@ -1081,36 +1120,55 @@ function setTimerLiveWithFake(timerEl){
       table: "viewer_count",
       filter: `event_id=eq.${eventId}`
     }, (payload) => {
-      if (payload?.new?.value !== undefined) {
-        current = payload.new.value;
+      const v = payload?.new?.value;
+      if (typeof v === "number") {
+        base = v;
         render();
       }
     })
     .subscribe();
 
+  // Авто-прыжок у всех одинаковый
+  const intervalId = setInterval(() => {
+    if (!document.body.contains(timerEl)) { clearInterval(intervalId); return; }
+    render();
+  }, TICK_MS);
+  timerEl._liveIntervalId = intervalId;
+
   function stop(e){ e.preventDefault(); e.stopPropagation(); }
 
+  // Кнопки: меняют BASE в Supabase (поэтому меняется у всех)
   if (window.IS_ADMIN) {
+    upBtn.addEventListener("pointerdown", stop, { passive:false });
+    downBtn.addEventListener("pointerdown", stop, { passive:false });
 
     upBtn.addEventListener("click", async (e) => {
       stop(e);
-      current += 2;
+      base += STEP;
       render();
       await sb.from("viewer_count")
-        .update({ value: current })
+        .update({ value: base })
         .eq("event_id", eventId);
     });
 
     downBtn.addEventListener("click", async (e) => {
       stop(e);
-      current = Math.max(0, current - 10);
+      base = Math.max(0, base - STEP);
       render();
       await sb.from("viewer_count")
-        .update({ value: current })
+        .update({ value: base })
         .eq("event_id", eventId);
     });
+  } else {
+    // на всякий — убираем возможность случайных кликов
+    upBtn.disabled = true;
+    downBtn.disabled = true;
   }
+
+  // первый рендер
+  render();
 }
+
 
 window.setTimerLiveWithFake = setTimerLiveWithFake;
 
