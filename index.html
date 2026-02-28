@@ -1024,23 +1024,24 @@ card.dataset.start = `${year}-${pad(mon+1)}-${pad(day)}T00:00:00`;
     return parseEventStart(s);
   }
 
+function getSbClient(){
+  return window.sb ||
+         window.supabaseClient ||
+         (window.supabase?.from ? window.supabase : null);
+}
+
 function setTimerLiveWithFake(timerEl){
   if (!timerEl) return;
   if (timerEl.dataset.liveDyn === "1") return;
   timerEl.dataset.liveDyn = "1";
 
   const card = timerEl.closest(".card");
-  const min  = parseInt(card?.dataset.min) || 80;
-  const max  = parseInt(card?.dataset.max) || 120;
-  const jump = parseInt(card?.dataset.jump) || 4;
-
-  let valAuto = Math.floor(min + Math.random() * (max - min));
-  let manualOffset = 0;
+  const eventId = card?.dataset?.eventId || "global";
 
   timerEl.innerHTML = `
     <span class="liveDotSmall"></span>
     <button type="button" class="live-arrow live-up">▲</button>
-    <span class="live-num">${valAuto.toLocaleString()}</span>
+    <span class="live-num">--</span>
     <button type="button" class="live-arrow live-down">▼</button>
   `;
 
@@ -1048,48 +1049,67 @@ function setTimerLiveWithFake(timerEl){
   const upBtn   = timerEl.querySelector(".live-up");
   const downBtn = timerEl.querySelector(".live-down");
 
-  function clampAuto(n){ return Math.max(min, Math.min(max, n)); } // для авто
-  function clampManual(n){ return Math.max(0, n); }                // для отображения (минимум 0, верх без лимита)
+  const sb = getSbClient();
+  if (!sb) return;
+
+  let current = 0;
 
   function render(){
-    const shown = clampManual(valAuto + manualOffset);
-    if (numEl) numEl.textContent = shown.toLocaleString();
+    numEl.textContent = current.toLocaleString();
   }
 
-  const step = Math.max(1, Math.floor(jump));
+  async function load(){
+    const { data } = await sb
+      .from("viewer_count")
+      .select("value")
+      .eq("event_id", eventId)
+      .single();
 
- if (window.IS_ADMIN) {
-  const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
-
-  // чтобы на мобиле тоже не срабатывало открытие стрима
-  upBtn?.addEventListener("pointerdown", stop);
-  downBtn?.addEventListener("pointerdown", stop);
-
-  upBtn?.addEventListener("click", (e) => {
-    stop(e);
-    manualOffset += step;
-    render();
-  });
-
-  downBtn?.addEventListener("click", (e) => {
-    stop(e);
-    manualOffset -= step;
-    render();
-  });
-}
-
-  const intervalId = setInterval(() => {
-    if (!document.body.contains(timerEl)) {
-      clearInterval(intervalId);
-      return;
+    if (data) {
+      current = data.value;
+      render();
     }
-    const delta = Math.floor(Math.random() * (jump * 2 + 1)) - jump;
-    valAuto = clampAuto(valAuto + delta);
-    render();
-  }, 2500);
+  }
 
-  timerEl._liveIntervalId = intervalId;
-  render();
+  load();
+
+  // realtime update
+  sb.channel("vc-" + eventId)
+    .on("postgres_changes", {
+      event: "UPDATE",
+      schema: "public",
+      table: "viewer_count",
+      filter: `event_id=eq.${eventId}`
+    }, (payload) => {
+      if (payload?.new?.value !== undefined) {
+        current = payload.new.value;
+        render();
+      }
+    })
+    .subscribe();
+
+  function stop(e){ e.preventDefault(); e.stopPropagation(); }
+
+  if (window.IS_ADMIN) {
+
+    upBtn.addEventListener("click", async (e) => {
+      stop(e);
+      current += 10;
+      render();
+      await sb.from("viewer_count")
+        .update({ value: current })
+        .eq("event_id", eventId);
+    });
+
+    downBtn.addEventListener("click", async (e) => {
+      stop(e);
+      current = Math.max(0, current - 10);
+      render();
+      await sb.from("viewer_count")
+        .update({ value: current })
+        .eq("event_id", eventId);
+    });
+  }
 }
 
 window.setTimerLiveWithFake = setTimerLiveWithFake;
