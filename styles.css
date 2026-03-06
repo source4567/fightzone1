@@ -1933,3 +1933,65 @@ body.is-modal-open{
   flex: 0 0 620px;
   height: 100%;
 }
+/* Псевдо-fullscreen режим */
+.fullscreen-btn {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  z-index: 10;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.5);
+  border: 1px solid rgba(255,255,255,0.3);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.fullscreen-btn:hover,
+.stream-player-box:hover .fullscreen-btn {
+  opacity: 1;
+}
+
+.fullscreen-btn:active {
+  transform: scale(0.92);
+}
+
+.stream-player-box.is-pseudo-fs {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-height: var(--vvh, 100vh) !important;
+  z-index: 999999 !important;
+  background: #000;
+  border-radius: 0 !important;
+  overflow: hidden;
+}
+
+body.is-pseudo-fs .topbar,
+body.is-pseudo-fs .promo-track,
+body.is-pseudo-fs .stream-chat,
+body.is-pseudo-fs .stream-info-bar {
+  display: none !important;
+}
+
+.stream-overlay.is-pseudo-fs {
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  z-index: 999998 !important;
+  background: #000;
+  align-items: stretch;
+}
+
+.stream-player-box.is-pseudo-fs iframe {
+  width: 100% !important;
+  height: 100% !important;
+  max-height: var(--vvh, 100vh) !important;
+}
