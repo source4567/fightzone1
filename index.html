@@ -2141,5 +2141,43 @@ document.addEventListener("DOMContentLoaded", async () => {
   setVVH();
 })();
 </script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const box = document.querySelector(".stream-player-box");
+  const overlay = document.getElementById("streamOverlay");
+  const btn = document.getElementById("btnPseudoFullscreen");
+
+  if (!box || !btn) return;
+
+  let isPseudoFS = false;
+
+  function togglePseudoFS() {
+    isPseudoFS = !isPseudoFS;
+
+    box.classList.toggle("is-pseudo-fs", isPseudoFS);
+    overlay?.classList.toggle("is-pseudo-fs", isPseudoFS);
+    document.body.classList.toggle("is-pseudo-fs", isPseudoFS);
+    document.documentElement.classList.toggle("is-pseudo-fs", isPseudoFS);
+
+    // Принудительно обновляем размеры после смены
+    if (window.setVVH) window.setVVH();
+    window.dispatchEvent(new Event("resize"));
+  }
+
+  btn.addEventListener("click", togglePseudoFS);
+
+  // Выход по Esc
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && isPseudoFS) {
+      togglePseudoFS();
+    }
+  });
+
+  // Двойной тап по области плеера → fullscreen
+  box.addEventListener("dblclick", () => {
+    if (!isPseudoFS) togglePseudoFS();
+  });
+});
+</script>
 </body>
 </html>
