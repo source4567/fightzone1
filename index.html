@@ -1877,7 +1877,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
       // Desktop: keep your fast-load protection
-      if (loadMs < 60) {
+      if (loadMs < 10) {
         fallback.style.display = "block";
         return;
       }
