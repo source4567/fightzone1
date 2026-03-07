@@ -1,0 +1,64 @@
+/* Fightzone Paywall Overlay */
+.fz-paywall {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 9999;
+  background: rgb(0, 0, 0);
+  backdrop-filter: blur(6px);
+}
+
+.fz-paywall.is-visible { display: flex; }
+
+.fz-paywall__card {
+  width: min(520px, 100%);
+  border: 1px solid rgb(255, 255, 255);
+  border-radius: 16px;
+  background: rgb(0, 0, 0);
+  padding: 18px;
+  box-shadow: 0 12px 40px rgba(212, 0, 255, 0.349);
+}
+
+.fz-paywall__title {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.fz-paywall__text {
+  font-size: 14px;
+  opacity: 0.9;
+  margin: 0 0 14px;
+  line-height: 1.35;
+}
+
+.fz-paywall__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.fz-paywall__btn {
+  appearance: none;
+  border: 1px solid rgb(255, 255, 255);
+  background: rgb(216, 19, 19);
+  color: #ffffff;
+  border-radius: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  text-decoration: none;
+  font-family: Inter, system-ui, sans-serif; /* ← шрифт */
+}
+
+.fz-paywall__btn:hover {
+  background: rgba(238, 3, 3, 0.61);
+}
+
+.fz-paywall__btn--primary {
+  background: rgba(255, 0, 0, 0.493);
+}
