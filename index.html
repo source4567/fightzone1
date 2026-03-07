@@ -1830,7 +1830,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const old = box.querySelector("iframe");
   if (old) old.remove();
 
-  // Ensure black fallback exists
   let fallback = box.querySelector(".iframe-fallback");
   if (!fallback){
     fallback = document.createElement("div");
@@ -1838,7 +1837,6 @@ document.addEventListener("DOMContentLoaded", () => {
     box.appendChild(fallback);
   }
 
-  // Показывать fallback только если он не отключен
   if (box.dataset.noFallback === "true") {
     fallback.style.display = "none";
   } else {
@@ -1847,15 +1845,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (!url) return;
 
-  const IS_MOBILE = window.matchMedia && window.matchMedia("(max-width: 520px)").matches;
-  const startedAt = performance.now();
-
   const iframe = document.createElement("iframe");
   iframe.src = url;
 
-  // safety check: если iframe не загрузился за 5 секунд — оставляем fallback
   const iframeCheck = setTimeout(() => {
-    fallback.style.display = "block";
+    if (box.dataset.noFallback !== "true") {
+      fallback.style.display = "block";
+    }
   }, 5000);
 
   iframe.setAttribute("allowfullscreen", "true");
@@ -1870,25 +1866,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   iframe.onload = () => {
     clearTimeout(iframeCheck);
-
-    const loadMs = performance.now() - startedAt;
-
-    // Mobile: hide black as soon as iframe loads
-    if (IS_MOBILE) {
-      fallback.style.display = "none";
-      return;
-    }
-
-    // Desktop: keep fast-load protection
-    if (loadMs < 60) {
-      fallback.style.display = "block";
-      return;
-    }
-
     fallback.style.display = "none";
   };
 
-  // ВАЖНО: iframe должен быть добавлен сразу
+  iframe.onerror = () => {
+    clearTimeout(iframeCheck);
+    fallback.style.display = "block";
+    console.log("Iframe failed to load:", url);
+  };
+
   box.appendChild(iframe);
 }
 
