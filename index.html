@@ -2403,7 +2403,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function makeEventId(ev) {
-    return `api-${String(ev.uri_name || ev.id || Math.random()).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+  return (ev.uri_name || ev.id || "").replace(/[^a-zA-Z0-9_-]/g, "-");
   }
 
   function makeTimerId(categoryKey, ev) {
