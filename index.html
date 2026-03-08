@@ -1826,10 +1826,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return (card?.dataset?.iframe || "").trim();
   }
 
- function setIframe(url){
-  const old = box.querySelector("iframe");
-  if (old) old.remove();
-
+function setIframe(url){
   let fallback = box.querySelector(".iframe-fallback");
   if (!fallback){
     fallback = document.createElement("div");
@@ -1837,23 +1834,27 @@ document.addEventListener("DOMContentLoaded", () => {
     box.appendChild(fallback);
   }
 
-  if (box.dataset.noFallback === "true") {
-    fallback.style.display = "none";
-  } else {
+  if (!url) {
     fallback.style.display = "block";
+    const old = box.querySelector("iframe");
+    if (old) old.remove();
+    return;
   }
 
-  if (!url) return;
+  let iframe = box.querySelector("iframe");
 
-  const iframe = document.createElement("iframe");
+  // если iframe уже есть и src тот же — ничего не делаем
+  if (iframe && iframe.src === url) {
+    return;
+  }
+
+  // если url новый — только тогда меняем iframe
+  if (iframe) iframe.remove();
+
+  fallback.style.display = "block";
+
+  iframe = document.createElement("iframe");
   iframe.src = url;
-
-  const iframeCheck = setTimeout(() => {
-    if (box.dataset.noFallback !== "true") {
-      fallback.style.display = "block";
-    }
-  }, 5000);
-
   iframe.setAttribute("allowfullscreen", "true");
   iframe.setAttribute("webkitallowfullscreen", "true");
   iframe.setAttribute("allow", "autoplay; fullscreen; encrypted-media; picture-in-picture");
@@ -1863,6 +1864,11 @@ document.addEventListener("DOMContentLoaded", () => {
   iframe.style.width = "100%";
   iframe.style.height = "100%";
   iframe.style.display = "block";
+  iframe.style.border = "0";
+
+  const iframeCheck = setTimeout(() => {
+    fallback.style.display = "block";
+  }, 5000);
 
   iframe.onload = () => {
     clearTimeout(iframeCheck);
@@ -1872,7 +1878,7 @@ document.addEventListener("DOMContentLoaded", () => {
   iframe.onerror = () => {
     clearTimeout(iframeCheck);
     fallback.style.display = "block";
-    console.log("Iframe failed to load:", url);
+    console.log("Iframe failed:", url);
   };
 
   box.appendChild(iframe);
