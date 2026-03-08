@@ -1719,7 +1719,8 @@ body.is-modal-open{
   position:absolute;
   inset:0;
   background:#000;
-  z-index:50;
+  z-index:50
+  pointer-events:none;
 }
 .auth-btn.auth-btn--logout{
   background: hsla(0, 72%, 51%, 0.87) !important;
