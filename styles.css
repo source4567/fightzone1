@@ -1920,3 +1920,11 @@ body.is-modal-open{
 .vip-price__old::after{
   transform: rotate(-25deg);
 }
+@media screen and (orientation: landscape) {
+
+  body{
+    width:100vw;
+    min-height:100vh;
+  }
+
+}
